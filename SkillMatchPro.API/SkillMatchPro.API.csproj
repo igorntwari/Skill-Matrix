@@ -11,7 +11,21 @@
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" Version="15.1.8" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.18" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkillMatchPro.Infrastructure\SkillMatchPro.Infrastructure.csproj" />
+  </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="GraphQL\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="GraphQL\" />
+  </ItemGroup>
 </Project>
