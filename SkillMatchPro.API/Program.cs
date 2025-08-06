@@ -20,8 +20,7 @@ public class Program
         builder.Services
             .AddGraphQLServer()
             .AddQueryType<Query>()
-            .AddMutationType<Mutations>()
-            .AddFluentValidation();
+            .AddMutationType<Mutations>();
 
 
         // Add PostgreSQL
