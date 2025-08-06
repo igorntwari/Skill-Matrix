@@ -24,8 +24,10 @@
 
   <ItemGroup>
     <None Remove="GraphQL\" />
+    <None Remove="GraphQL\Inputs\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="GraphQL\" />
+    <Folder Include="GraphQL\Inputs\" />
   </ItemGroup>
 </Project>
