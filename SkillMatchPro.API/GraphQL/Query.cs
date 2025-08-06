@@ -12,3 +12,4 @@ public class Query
     {
         return await context.Employees.ToListAsync();
     }
+}

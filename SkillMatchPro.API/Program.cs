@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SkillMatchPro.API.GraphQL;
 using SkillMatchPro.Infrastructure.Data;
+using FluentValidation.AspNetCore;
 
 namespace SkillMatchPro.API;
 
@@ -18,7 +19,10 @@ public class Program
         // Add GraphQL
         builder.Services
             .AddGraphQLServer()
-            .AddQueryType<Query>();
+            .AddQueryType<Query>()
+            .AddMutationType<Mutations>()
+            .AddFluentValidation();
+
 
         // Add PostgreSQL
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
