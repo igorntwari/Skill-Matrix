@@ -29,4 +29,12 @@ public class Query
             .ThenInclude(es => es.Skill)
             .ToListAsync();
     }
+
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<List<User>> GetAllUsers([Service] ApplicationDbContext context)
+    {
+        return await context.Users
+            .Include(u => u.Employee)
+            .ToListAsync();
+    }
 }

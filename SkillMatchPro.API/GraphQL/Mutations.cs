@@ -1,15 +1,20 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SkillMatchPro.API.GraphQL.Inputs;
 using SkillMatchPro.API.GraphQL.Types;
 using SkillMatchPro.API.Services;
 using SkillMatchPro.Domain.Entities;
+using SkillMatchPro.Domain.Enums;
 using SkillMatchPro.Infrastructure.Data;
+using HotChocolate.Authorization;
+using System.Security.Claims;
+using System;
+using System.Threading.Tasks;
 
 namespace SkillMatchPro.API.GraphQL;
 
+
 public class Mutations
-{
+{   
     public async Task<Employee> CreateEmployee(
         CreateEmployeeInput input,
         [Service] ApplicationDbContext context)
@@ -196,5 +201,162 @@ public class Mutations
             User = user,
             Employee = user.Employee
         };
+    }
+
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<User> AssignRole(
+    Guid userId,
+    UserRole newRole,
+    [Service] ApplicationDbContext context)
+    {
+        var user = await context.Users
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            throw new GraphQLException("User not found.");
+        }
+
+        // For now, we'll need to add a method to User entity to update role
+        // Or use reflection/EF Core to update
+        context.Entry(user).Property(u => u.Role).CurrentValue = newRole;
+
+        await context.SaveChangesAsync();
+
+        return user;
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<List<Employee>> GetAllEmployees(
+        [Service] ApplicationDbContext context)
+    {
+        return await context.Employees
+            .Include(e => e.EmployeeSkills)
+            .ThenInclude(es => es.Skill)
+            .ToListAsync();
+    }
+    //// TEMPORARY - Remove in production!
+    //public async Task<AuthPayload> CreateAdminUser(
+    //    [Service] ApplicationDbContext context,
+    //    [Service] JwtService jwtService)
+    //{
+    //    // Check if admin already exists
+    //    var adminExists = await context.Users
+    //        .AnyAsync(u => u.Email == "admin@skillmatchpro.com");
+
+    //    if (adminExists)
+    //    {
+    //        throw new GraphQLException("Admin user already exists.");
+    //    }
+
+    //    // Create admin user
+    //    var passwordHash = BCrypt.Net.BCrypt.HashPassword("AdminPass123!");
+    //    var adminUser = new User("admin@skillmatchpro.com", passwordHash, UserRole.Admin);
+
+    //    // Create admin employee
+    //    var adminEmployee = new Employee(
+    //        "System",
+    //        "Administrator",
+    //        "admin@skillmatchpro.com",
+    //        "IT",
+    //        "System Administrator"
+    //    );
+
+    //    adminUser.LinkToEmployee(adminEmployee.Id);
+
+    //    context.Users.Add(adminUser);
+    //    context.Employees.Add(adminEmployee);
+    //    await context.SaveChangesAsync();
+
+    //    var token = jwtService.GenerateToken(adminUser);
+
+    //    return new AuthPayload
+    //    {
+    //        Token = token,
+    //        User = adminUser,
+    //        Employee = adminEmployee
+    //    };
+    //}
+
+    // Add this field at the top of Mutations class
+    private readonly ILogger<Mutations> _logger;
+
+    // Add constructor
+    public Mutations(ILogger<Mutations> logger)
+    {
+        _logger = logger;
+    }
+
+    // Update AssignRole to add logging
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<User> AssignRole(
+        Guid userId,
+        UserRole newRole,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var currentUser = httpContextAccessor.HttpContext?.User;
+        var adminEmail = currentUser?.FindFirst(ClaimTypes.Email)?.Value;
+
+        _logger.LogInformation("Admin {AdminEmail} attempting to assign role {NewRole} to user {UserId}",
+            adminEmail, newRole, userId);
+
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            _logger.LogWarning("Attempted to assign role to non-existent user {UserId}", userId);
+            throw new GraphQLException("User not found.");
+        }
+
+        var oldRole = user.Role;
+        context.Entry(user).Property(u => u.Role).CurrentValue = newRole;
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Successfully changed user {UserId} role from {OldRole} to {NewRole}",
+            userId, oldRole, newRole);
+
+        return user;
+    }
+
+    [Authorize]
+    public async Task<Employee> UpdateMyProfile(
+    string? firstName,
+    string? lastName,
+    string? title,
+    [Service] ApplicationDbContext context,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var userEmail = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value;
+
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            throw new UnauthorizedAccessException("User email not found in token");
+        }
+
+        var employee = await context.Employees
+            .FirstOrDefaultAsync(e => e.Email.ToLower() == userEmail.ToLower());
+
+        if (employee == null)
+        {
+            throw new GraphQLException("Employee profile not found");
+        }
+
+        // Update only provided fields
+        if (!string.IsNullOrEmpty(firstName))
+            context.Entry(employee).Property(e => e.FirstName).CurrentValue = firstName;
+
+        if (!string.IsNullOrEmpty(lastName))
+            context.Entry(employee).Property(e => e.LastName).CurrentValue = lastName;
+
+        if (!string.IsNullOrEmpty(title))
+            context.Entry(employee).Property(e => e.Title).CurrentValue = title;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("User {Email} updated their profile", userEmail);
+
+        return employee;
     }
 }
