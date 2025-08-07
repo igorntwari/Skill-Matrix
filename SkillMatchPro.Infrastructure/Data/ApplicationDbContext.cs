@@ -13,6 +13,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Employee> Employees { get; set; }
     public DbSet<Skill> Skills { get; set; }
     public DbSet<EmployeeSkill> EmployeeSkills { get; set; }
+    public DbSet<User> Users { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,6 +23,17 @@ public class ApplicationDbContext : DbContext
         {
             // This creates a composite key (EmployeeId + SkillId)
             entity.HasKey(es => new { es.EmployeeId, es.SkillId });
+        });
+
+        // This creates a composite key (EmployeeId + SkillId)
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(u => u.Id);
+            entity.HasIndex(u => u.Email).IsUnique();
+
+            entity.HasOne(u => u.Employee)
+                .WithOne()
+                .HasForeignKey<User>(u => u.EmployeeId);
         });
     }
 }

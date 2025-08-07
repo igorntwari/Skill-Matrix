@@ -9,10 +9,13 @@
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'https' " />
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'http' " />
   <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
     <PackageReference Include="HotChocolate.AspNetCore" Version="15.1.8" />
     <PackageReference Include="HotChocolate.Data.Extensions" Version="0.8.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.18" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
@@ -20,6 +23,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.13.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SkillMatchPro.Infrastructure\SkillMatchPro.Infrastructure.csproj" />
@@ -29,10 +33,14 @@
     <None Remove="GraphQL\" />
     <None Remove="GraphQL\Inputs\" />
     <None Remove="GraphQL\Validators\" />
+    <None Remove="GraphQL\Type\" />
+    <None Remove="Services\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="GraphQL\" />
     <Folder Include="GraphQL\Inputs\" />
     <Folder Include="GraphQL\Validators\" />
+    <Folder Include="GraphQL\Type\" />
+    <Folder Include="Services\" />
   </ItemGroup>
 </Project>

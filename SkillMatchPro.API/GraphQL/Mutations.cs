@@ -1,5 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System;
+using Microsoft.EntityFrameworkCore;
 using SkillMatchPro.API.GraphQL.Inputs;
+using SkillMatchPro.API.GraphQL.Types;
+using SkillMatchPro.API.Services;
 using SkillMatchPro.Domain.Entities;
 using SkillMatchPro.Infrastructure.Data;
 
@@ -94,7 +97,7 @@ public class Mutations
         }
 
         // 4. Add skill using domain method
-        employee.AddSkill(skill, input.Proficiency);  // semicolon was missing
+        employee.AddSkill(skill, input.Proficiency);
 
         // 5. Save to database
         await context.SaveChangesAsync();
@@ -102,5 +105,96 @@ public class Mutations
         // 6. Return the newly created relationship
         return employee.EmployeeSkills
             .First(es => es.SkillId == input.SkillId);
+    }
+
+    public async Task<AuthPayload> Register(
+    RegisterInput input,
+    [Service] ApplicationDbContext context,
+    [Service] JwtService jwtService)
+    {
+        try
+        {
+            // Check if user already exists
+            var userExists = await context.Users
+                .AnyAsync(u => u.Email.ToLower() == input.Email.ToLower());
+
+            if (userExists)
+            {
+                throw new GraphQLException("User with this email already exists.");
+            }
+
+            // Hash the password
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(input.Password);
+
+            // Create user
+            var user = new User(input.Email, passwordHash);
+
+            // Create employee
+            var employee = new Employee(
+                input.FirstName,
+                input.LastName,
+                input.Email,
+                input.Department,
+                input.Title
+            );
+
+            // Link user to employee
+            user.LinkToEmployee(employee.Id);
+
+            // Add to database
+            context.Users.Add(user);
+            context.Employees.Add(employee);
+            await context.SaveChangesAsync();
+
+            // Generate token
+            var token = jwtService.GenerateToken(user);
+
+            return new AuthPayload
+            {
+                Token = token,
+                User = user,
+                Employee = employee
+            };
+        }
+        catch (Exception ex)
+        {
+            // Log the actual error
+            Console.WriteLine($"Registration error: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            throw new GraphQLException($"Registration failed: {ex.Message}");
+        }
+
+    }
+
+    public async Task<AuthPayload> Login(
+        LoginInput input,
+        [Service] ApplicationDbContext context,
+        [Service] JwtService jwtService)
+    {
+        // Find user
+        var user = await context.Users
+            .Include(u => u.Employee)
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == input.Email.ToLower());
+
+        if (user == null)
+        {
+            throw new GraphQLException("Invalid email or password.");
+        }
+
+        // Verify password
+        if (!BCrypt.Net.BCrypt.Verify(input.Password, user.PasswordHash))
+        {
+            throw new GraphQLException("Invalid email or password.");
+        }
+
+        // Generate token
+        var token = jwtService.GenerateToken(user);
+
+        return new AuthPayload
+        {
+            Token = token,
+            User = user,
+            Employee = user.Employee
+        };
     }
 }
