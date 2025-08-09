@@ -89,6 +89,9 @@ public class Program
                 .AddMutationType<Mutations>()
                 .AddAuthorization()
                 .AddErrorFilter<ErrorFilter>()
+                .AddFiltering()        
+                .AddSorting()        
+                .AddProjections()
                 .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = true);
 
             // Add PostgreSQL with environment variable
