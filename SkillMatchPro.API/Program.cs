@@ -31,6 +31,8 @@ public class Program
             Env.Load("../.env");
 
             var builder = WebApplication.CreateBuilder(args);
+            builder.Services.AddHttpContextAccessor();
+
             var connectionString = Environment.GetEnvironmentVariable("DATABASE_CONNECTION")
                 ?? builder.Configuration.GetConnectionString("DefaultConnection");
 

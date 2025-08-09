@@ -35,5 +35,10 @@ public class ApplicationDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<User>(u => u.EmployeeId);
         });
+    modelBuilder.Entity<Employee>()
+        .HasQueryFilter(e => !e.IsDeleted);
+
+    modelBuilder.Entity<Skill>()
+        .HasQueryFilter(s => !s.IsDeleted);
     }
 }

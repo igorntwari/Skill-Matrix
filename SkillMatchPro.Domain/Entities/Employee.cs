@@ -11,6 +11,9 @@ public class Employee
     public string Title { get; private set; }
     public DateTime HiredDate { get; private set; }
     public bool IsActive { get; private set; }
+        public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAt { get; private set; }
+    public string? DeletedBy { get; private set; }
 
     private readonly List<EmployeeSkill> _employeeSkills = new();
     public IReadOnlyCollection<EmployeeSkill> EmployeeSkills => _employeeSkills.AsReadOnly();
@@ -39,5 +42,19 @@ public class Employee
             throw new InvalidOperationException($"Employee already has skill: {skill.Name}");
 
         _employeeSkills.Add(new EmployeeSkill(Id, skill.Id, proficiency));
+    }
+
+    public void SoftDelete(string deletedBy)
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        DeletedBy = deletedBy;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+        DeletedBy = null;
     }
 }

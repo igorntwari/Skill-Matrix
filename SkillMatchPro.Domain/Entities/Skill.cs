@@ -7,8 +7,25 @@ public class Skill
     public string Category { get; private set; }
     public string Description { get; private set; }
     public bool IsActive { get; private set; }
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAt { get; private set; }
+    public string? DeletedBy { get; private set; }
 
     private Skill() { }
+
+    public void SoftDelete(string deletedBy)
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        DeletedBy = deletedBy;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+        DeletedBy = null;
+    }
 
     public Skill(string name, string category, string description = "")
     {

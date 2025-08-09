@@ -343,7 +343,6 @@ public class Mutations
             throw new GraphQLException("Employee profile not found");
         }
 
-        // Update only provided fields
         if (!string.IsNullOrEmpty(firstName))
             context.Entry(employee).Property(e => e.FirstName).CurrentValue = firstName;
 
@@ -358,5 +357,100 @@ public class Mutations
         _logger.LogInformation("User {Email} updated their profile", userEmail);
 
         return employee;
+    }
+
+    [Authorize]
+    public async Task<Employee> UpdateEmployee(
+    UpdateEmployeeInput input,
+    [Service] ApplicationDbContext context,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var currentUserEmail = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value;
+        var currentUserRole = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Role)?.Value;
+
+        var employee = await context.Employees
+            .FirstOrDefaultAsync(e => e.Id == input.Id);
+
+        if (employee == null)
+        {
+            throw new GraphQLException("Employee not found.");
+        }
+
+        // Check authorization: Users can edit themselves, Managers/Admins can edit anyone
+        if (currentUserRole == "Employee" && employee.Email.ToLower() != currentUserEmail?.ToLower())
+        {
+            throw new UnauthorizedAccessException("You can only edit your own profile.");
+        }
+
+        // Update only provided fields
+        if (!string.IsNullOrWhiteSpace(input.FirstName))
+            context.Entry(employee).Property(e => e.FirstName).CurrentValue = input.FirstName;
+
+        if (!string.IsNullOrWhiteSpace(input.LastName))
+            context.Entry(employee).Property(e => e.LastName).CurrentValue = input.LastName;
+
+        if (!string.IsNullOrWhiteSpace(input.Department) && currentUserRole != "Employee")
+            context.Entry(employee).Property(e => e.Department).CurrentValue = input.Department;
+
+        if (!string.IsNullOrWhiteSpace(input.Title) && currentUserRole != "Employee")
+            context.Entry(employee).Property(e => e.Title).CurrentValue = input.Title;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Employee {EmployeeId} updated by {User}", input.Id, currentUserEmail);
+
+        return employee;
+    }
+
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<bool> DeleteEmployee(
+        Guid id,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var currentUserEmail = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        var employee = await context.Employees
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        if (employee == null)
+        {
+            throw new GraphQLException("Employee not found.");
+        }
+
+        employee.SoftDelete(currentUserEmail);
+        await context.SaveChangesAsync();
+
+        _logger.LogWarning("Employee {EmployeeId} soft deleted by {User}", id, currentUserEmail);
+
+        return true;
+    }
+
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<bool> DeleteSkill(
+        Guid id,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var currentUserEmail = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        var skill = await context.Skills
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (skill == null)
+        {
+            throw new GraphQLException("Skill not found.");
+        }
+
+        skill.SoftDelete(currentUserEmail);
+        await context.SaveChangesAsync();
+
+        _logger.LogWarning("Skill {SkillId} soft deleted by {User}", id, currentUserEmail);
+
+        return true;
     }
 }
