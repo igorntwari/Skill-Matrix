@@ -13,11 +13,14 @@
 
   <ItemGroup>
     <None Remove="Data\" />
+    <None Remove="Services\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Data\" />
+    <Folder Include="Services\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SkillMatchPro.Domain\SkillMatchPro.Domain.csproj" />
+    <ProjectReference Include="..\SkillMatchPro.Application\SkillMatchPro.Application.csproj" />
   </ItemGroup>
 </Project>

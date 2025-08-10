@@ -9,6 +9,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Serilog;
 using Serilog.Events;
+using SkillMatchPro.Application.Services;
+using SkillMatchPro.Infrastructure.Services;
 
 
 namespace SkillMatchPro.API;
@@ -48,7 +50,9 @@ public class Program
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddScoped<JwtService>();
-
+            // Register application services
+            builder.Services.AddScoped<IAllocationService, AllocationService>();
+            // We'll implement NotificationService later when needed
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

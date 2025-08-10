@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SkillMatchPro.Infrastructure.Data;
@@ -11,9 +12,11 @@ using SkillMatchPro.Infrastructure.Data;
 namespace SkillMatchPro.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250810193017_AddAvailabilitySystem")]
+    partial class AddAvailabilitySystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -118,48 +121,6 @@ namespace SkillMatchPro.Infrastructure.Migrations
                     b.ToTable("EmployeeSkills");
                 });
 
-            modelBuilder.Entity("SkillMatchPro.Domain.Entities.Notification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RelatedEntityId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("RelatedEntityType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "IsRead");
-
-                    b.ToTable("Notifications");
-                });
-
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -192,8 +153,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
@@ -212,7 +172,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Projects");
+                    b.ToTable("Project");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.ProjectAssignment", b =>
@@ -256,7 +216,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasIndex("EmployeeId", "ProjectId", "IsActive");
 
-                    b.ToTable("ProjectAssignments");
+                    b.ToTable("ProjectAssignment");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.ProjectRequirement", b =>
@@ -283,7 +243,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasIndex("SkillId");
 
-                    b.ToTable("ProjectRequirements");
+                    b.ToTable("ProjectRequirement");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.Skill", b =>
@@ -383,17 +343,6 @@ namespace SkillMatchPro.Infrastructure.Migrations
                     b.Navigation("Employee");
 
                     b.Navigation("Skill");
-                });
-
-            modelBuilder.Entity("SkillMatchPro.Domain.Entities.Notification", b =>
-                {
-                    b.HasOne("SkillMatchPro.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.ProjectAssignment", b =>

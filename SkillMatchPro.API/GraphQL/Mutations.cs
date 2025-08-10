@@ -9,6 +9,7 @@ using HotChocolate.Authorization;
 using System.Security.Claims;
 using System;
 using System.Threading.Tasks;
+using SkillMatchPro.Application.Services;
 
 namespace SkillMatchPro.API.GraphQL;
 
@@ -452,5 +453,142 @@ public class Mutations
         _logger.LogWarning("Skill {SkillId} soft deleted by {User}", id, currentUserEmail);
 
         return true;
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<Project> CreateProject(
+     string name,
+     string description,
+     string department,
+     string startDate,
+     string endDate,
+     int priority,
+     [Service] ApplicationDbContext context,
+     [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        if (!DateTime.TryParse(startDate, out var parsedStartDate))
+            throw new ArgumentException("Invalid start date format");
+
+        if (!DateTime.TryParse(endDate, out var parsedEndDate))
+            throw new ArgumentException("Invalid end date format");
+
+        // Ensure UTC kind so PostgreSQL accepts it
+        parsedStartDate = DateTime.SpecifyKind(parsedStartDate, DateTimeKind.Utc);
+        parsedEndDate = DateTime.SpecifyKind(parsedEndDate, DateTimeKind.Utc);
+
+        var createdBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        var project = new Project(
+            name,
+            description,
+            department,
+            parsedStartDate,
+            parsedEndDate,
+            createdBy,
+            priority
+        );
+
+        context.Projects.Add(project);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Project {ProjectName} created by {User}", name, createdBy);
+
+        return project;
+    }
+
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<ProjectRequirement> AddProjectRequirement(
+     Guid projectId,
+     Guid skillId,
+     ProficiencyLevel minimumProficiency,
+     int requiredCount,
+     [Service] ApplicationDbContext context)
+    {
+        var project = await context.Projects
+            .Include(p => p.Requirements)
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+
+        if (project == null)
+            throw new GraphQLException("Project not found");
+
+        // Check if skill exists
+        var skillExists = await context.Skills.AnyAsync(s => s.Id == skillId);
+        if (!skillExists)
+            throw new GraphQLException("Skill not found");
+
+        // Create the requirement directly instead of using the method
+        var requirement = new ProjectRequirement(projectId, skillId, minimumProficiency, requiredCount);
+
+        context.ProjectRequirements.Add(requirement);
+        await context.SaveChangesAsync();
+
+        // Load the requirement with navigation properties
+        return await context.ProjectRequirements
+            .Include(pr => pr.Skill)
+            .FirstAsync(pr => pr.Id == requirement.Id);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<ProjectAssignment> AssignEmployeeToProject(
+    Guid projectId,
+    Guid employeeId,
+    string role,
+    int allocationPercentage,
+    string startDate,
+    string endDate,
+    [Service] ApplicationDbContext context,
+    [Service] IAllocationService allocationService,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var assignedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        // Parse dates and convert to UTC
+        if (!DateTime.TryParse(startDate, out var parsedStartDate))
+            throw new ArgumentException("Invalid start date format");
+        if (!DateTime.TryParse(endDate, out var parsedEndDate))
+            throw new ArgumentException("Invalid end date format");
+
+        // Convert to UTC
+        parsedStartDate = DateTime.SpecifyKind(parsedStartDate, DateTimeKind.Utc);
+        parsedEndDate = DateTime.SpecifyKind(parsedEndDate, DateTimeKind.Utc);
+
+        // Check for conflicts
+        var hasConflict = await allocationService.CheckAllocationConflict(
+            employeeId, allocationPercentage, parsedStartDate, parsedEndDate);
+
+        if (hasConflict)
+            throw new GraphQLException("Employee has allocation conflicts in the specified period");
+
+        var assignment = new ProjectAssignment(projectId, employeeId, role,
+            allocationPercentage, parsedStartDate, parsedEndDate, assignedBy);
+
+        context.ProjectAssignments.Add(assignment);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Employee {EmployeeId} assigned to project {ProjectId} by {User}",
+            employeeId, projectId, assignedBy);
+
+        return assignment;
+    }
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<List<Employee>> GetAvailableEmployeesForSkill(
+    Guid skillId,
+    ProficiencyLevel minProficiency,
+    int allocationPercentage,
+    string startDate,  // Changed to string
+    string endDate,    // Changed to string
+    [Service] IAllocationService allocationService)
+    {
+        // Parse dates
+        if (!DateTime.TryParse(startDate, out var parsedStartDate))
+            throw new ArgumentException("Invalid start date format");
+        if (!DateTime.TryParse(endDate, out var parsedEndDate))
+            throw new ArgumentException("Invalid end date format");
+
+        return await allocationService.FindAvailableEmployees(
+            skillId, minProficiency, allocationPercentage, parsedStartDate, parsedEndDate);
     }
 }

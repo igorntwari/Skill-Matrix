@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SkillMatchPro.Infrastructure.Data;
@@ -11,9 +12,11 @@ using SkillMatchPro.Infrastructure.Data;
 namespace SkillMatchPro.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250810193653_AddNotificationsAndAudit")]
+    partial class AddNotificationsAndAudit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -192,8 +195,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
@@ -212,7 +214,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Projects");
+                    b.ToTable("Project");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.ProjectAssignment", b =>
@@ -256,7 +258,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasIndex("EmployeeId", "ProjectId", "IsActive");
 
-                    b.ToTable("ProjectAssignments");
+                    b.ToTable("ProjectAssignment");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.ProjectRequirement", b =>
@@ -283,7 +285,7 @@ namespace SkillMatchPro.Infrastructure.Migrations
 
                     b.HasIndex("SkillId");
 
-                    b.ToTable("ProjectRequirements");
+                    b.ToTable("ProjectRequirement");
                 });
 
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.Skill", b =>

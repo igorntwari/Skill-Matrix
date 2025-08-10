@@ -1,4 +1,6 @@
 ﻿using SkillMatchPro.Domain.Enums;
+using SkillMatchPro.Domain.ValueObjects;
+
 namespace SkillMatchPro.Domain.Entities;
 
 public class Employee
@@ -57,4 +59,53 @@ public class Employee
         DeletedAt = null;
         DeletedBy = null;
     }
+
+    // Add these to Employee entity:
+
+    private readonly List<ProjectAssignment> _projectAssignments = new();
+    public IReadOnlyCollection<ProjectAssignment> ProjectAssignments => _projectAssignments.AsReadOnly();
+
+    private readonly List<EmployeeAvailability> _availabilities = new();
+    public IReadOnlyCollection<EmployeeAvailability> Availabilities => _availabilities.AsReadOnly();
+
+    // Add these methods:
+    public int GetCurrentAllocationPercentage()
+    {
+        var today = DateTime.UtcNow.Date;
+        return _projectAssignments
+            .Where(pa => pa.IsActive && pa.StartDate <= today && pa.EndDate >= today)
+            .Sum(pa => pa.AllocationPercentage);
+    }
+
+    public bool IsAvailableForAllocation(int requiredPercentage)
+    {
+        var currentAllocation = GetCurrentAllocationPercentage();
+        return (currentAllocation + requiredPercentage) <= 100;
+    }
+
+    public List<AvailabilitySlot> GetAvailabilityForDateRange(DateTime startDate, DateTime endDate)
+    {
+        var availability = new List<AvailabilitySlot>();
+        var currentDate = startDate.Date;
+
+        while (currentDate <= endDate.Date)
+        {
+            var specificAvailability = _availabilities
+                .FirstOrDefault(a => a.Date == currentDate);
+
+            if (specificAvailability != null)
+            {
+                availability.Add(new AvailabilitySlot(currentDate, specificAvailability.AvailableHours));
+            }
+            else
+            {
+                availability.Add(new AvailabilitySlot(currentDate, 8));
+            }
+
+            currentDate = currentDate.AddDays(1);
+        }
+
+        return availability;
+    }
+
 }

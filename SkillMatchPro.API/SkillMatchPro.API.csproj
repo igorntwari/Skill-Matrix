@@ -32,6 +32,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SkillMatchPro.Infrastructure\SkillMatchPro.Infrastructure.csproj" />
+    <ProjectReference Include="..\SkillMatchPro.Application\SkillMatchPro.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
