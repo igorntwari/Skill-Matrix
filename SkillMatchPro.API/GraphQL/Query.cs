@@ -3,6 +3,10 @@ using SkillMatchPro.Domain.Entities;
 using SkillMatchPro.Infrastructure.Data;
 using HotChocolate.Authorization;
 using HotChocolate.Data;
+using SkillMatchPro.Application.Services;
+using SkillMatchPro.Domain.Enums;
+using SkillMatchPro.Domain.ValueObjects;
+using System.Security.Claims;
 
 namespace SkillMatchPro.API.GraphQL;
 
@@ -116,5 +120,54 @@ public async Task<List<Employee>> SearchEmployees(
         return context.Employees
             .Include(e => e.EmployeeSkills)
             .ThenInclude(es => es.Skill);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<TeamComposition> GetTeamComposition(
+    Guid projectId,
+    [Service] IMatchingService matchingService,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var requestedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        return await matchingService.GetTeamComposition(projectId, requestedBy);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<List<MatchCandidate>> GetCandidatesForSkill(
+        Guid skillId,
+        ProficiencyLevel minProficiency,
+        [Service] IMatchingService matchingService)
+    {
+        // Default to next 3 months for availability check
+        var startDate = DateTime.UtcNow;
+        var endDate = DateTime.UtcNow.AddMonths(3);
+
+        return await matchingService.FindCandidatesForSkill(
+            skillId, minProficiency, startDate, endDate, 100);
+    }
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<List<Project>> GetProjects([Service] ApplicationDbContext context)
+    {
+        return await context.Projects
+            .Include(p => p.Requirements)
+            .ThenInclude(r => r.Skill)
+            .Where(p => !p.IsDeleted)
+            .ToListAsync();
+    }
+
+    // Also add a filtered version
+    [UseProjection]
+    [UseFiltering]
+    [UseSorting]
+    [Authorize(Policy = "ManagerOrAbove")]
+    public IQueryable<Project> GetFilteredProjects([Service] ApplicationDbContext context)
+    {
+        return context.Projects
+            .Include(p => p.Requirements)
+            .ThenInclude(r => r.Skill)
+            .Include(p => p.Assignments)
+            .ThenInclude(a => a.Employee);
     }
 }

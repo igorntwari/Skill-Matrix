@@ -50,6 +50,8 @@ public class Program
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddScoped<JwtService>();
+            builder.Services.AddScoped<IMatchingService, MatchingService>();
+
             // Register application services
             builder.Services.AddScoped<IAllocationService, AllocationService>();
             // We'll implement NotificationService later when needed
