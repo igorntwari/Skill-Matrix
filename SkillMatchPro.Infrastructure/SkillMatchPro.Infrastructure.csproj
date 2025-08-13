@@ -14,10 +14,12 @@
   <ItemGroup>
     <None Remove="Data\" />
     <None Remove="Services\" />
+    <None Remove="Scoring\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Data\" />
     <Folder Include="Services\" />
+    <Folder Include="Scoring\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SkillMatchPro.Domain\SkillMatchPro.Domain.csproj" />
