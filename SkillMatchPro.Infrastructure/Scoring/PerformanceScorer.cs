@@ -39,7 +39,7 @@ public class PerformanceScorer : IScoringComponent
         // Calculate average metrics
         var avgDeliveryRate = performances.Average(p => p.GetDeliveryRate());
         var avgQuality = performances.Average(p => p.QualityScore);
-        var avgManagerRating = performances.Average(p => p.ManagerRating * 20); // Convert 1-5 to 0-100
+        var avgManagerRating = (decimal) performances.Average(p => p.ManagerRating) * 20m;
         var avgEstimationAccuracy = performances.Average(p => p.GetEstimationAccuracy());
 
         // Weighted calculation
@@ -52,7 +52,7 @@ public class PerformanceScorer : IScoringComponent
         {
             ["DeliveryRate"] = Math.Round(avgDeliveryRate, 1),
             ["QualityScore"] = Math.Round(avgQuality, 1),
-            ["ManagerRating"] = Math.Round(avgManagerRating / 20, 1), // Back to 1-5 scale
+            ["ManagerRating"] = Math.Round(avgManagerRating / 20m, 1), // Back to 1-5 scale
             ["ProjectsEvaluated"] = performances.Count
         };
 

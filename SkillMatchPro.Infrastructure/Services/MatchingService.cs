@@ -123,16 +123,16 @@ public class MatchingService : IMatchingService
         return candidates.OrderByDescending(c => c.Score.TotalScore).ToList();
     }
 
-    public async Task<MatchScore> CalculateMatchScore(
-        Employee employee,
-        Skill requiredSkill,
-        ProficiencyLevel requiredProficiency)
+    public Task<MatchScore> CalculateMatchScore(
+    Employee employee,
+    Skill requiredSkill,
+    ProficiencyLevel requiredProficiency)
     {
         var employeeSkill = employee.EmployeeSkills
             .FirstOrDefault(es => es.SkillId == requiredSkill.Id);
 
         if (employeeSkill == null)
-            return new MatchScore(0, 0, 0, "Employee doesn't have the required skill");
+            return Task.FromResult(new MatchScore(0, 0, 0, "Employee doesn't have the required skill"));
 
         // Calculate proficiency score (0-100)
         var proficiencyScore = CalculateProficiencyScore(
@@ -144,7 +144,8 @@ public class MatchingService : IMatchingService
         var availabilityScore = 100 - currentAllocation;
 
         // Calculate experience score based on how long they've had the skill
-        var monthsWithSkill = (DateTime.UtcNow - employeeSkill.AcquiredDate).Days / 30;
+        // AcquiredDate is NOT nullable
+        var monthsWithSkill = (int)((DateTime.UtcNow - employeeSkill.AcquiredDate).TotalDays / 30);
         var experienceScore = Math.Min(100, monthsWithSkill * 2); // 2 points per month, max 100
 
         var explanation = GenerateExplanation(
@@ -153,11 +154,11 @@ public class MatchingService : IMatchingService
             currentAllocation,
             monthsWithSkill);
 
-        return new MatchScore(
+        return Task.FromResult(new MatchScore(
             proficiencyScore,
             availabilityScore,
             experienceScore,
-            explanation);
+            explanation));
     }
 
     private decimal CalculateProficiencyScore(

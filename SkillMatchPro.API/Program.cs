@@ -51,6 +51,8 @@ public class Program
             builder.Services.AddSwaggerGen();
             builder.Services.AddScoped<JwtService>();
             builder.Services.AddScoped<IMatchingService, MatchingService>();
+            builder.Services.AddScoped<IAdvancedMatchingService, AdvancedMatchingService>();
+
 
             // Register application services
             builder.Services.AddScoped<IAllocationService, AllocationService>();

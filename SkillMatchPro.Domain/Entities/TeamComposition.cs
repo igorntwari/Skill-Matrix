@@ -40,6 +40,15 @@ public class TeamComposition
         if (_teamMembers.Any(tm => tm.EmployeeId == employee.Id))
         {
             var existingMember = _teamMembers.First(tm => tm.EmployeeId == employee.Id);
+
+            // Check if adding this allocation would exceed 100%
+            if (existingMember.TotalAllocation + allocationPercentage > 100)
+            {
+                // Adjust allocation to fit
+                allocationPercentage = 100 - existingMember.TotalAllocation;
+                if (allocationPercentage <= 0) return; // Skip if no room
+            }
+
             existingMember.AddSkillAssignment(skill, allocationPercentage);
         }
         else

@@ -7,6 +7,7 @@ using SkillMatchPro.Application.Services;
 using SkillMatchPro.Domain.Enums;
 using SkillMatchPro.Domain.ValueObjects;
 using System.Security.Claims;
+using SkillMatchPro.Application.Scoring;
 
 namespace SkillMatchPro.API.GraphQL;
 
@@ -169,5 +170,68 @@ public async Task<List<Employee>> SearchEmployees(
             .ThenInclude(r => r.Skill)
             .Include(p => p.Assignments)
             .ThenInclude(a => a.Employee);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<AdvancedMatchResult> GetAdvancedTeamComposition(
+    Guid projectId,
+    [Service] IAdvancedMatchingService advancedMatchingService,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var requestedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        return await advancedMatchingService.GetTeamCompositionWithScoring(
+            projectId, requestedBy);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<AdvancedMatchResult> GetCustomScoredTeamComposition(
+        Guid projectId,
+        decimal? proficiencyWeight,
+        decimal? availabilityWeight,
+        decimal? performanceWeight,
+        decimal? chemistryWeight,
+        decimal? workloadWeight,
+        decimal? experienceWeight,
+        [Service] IAdvancedMatchingService advancedMatchingService,
+        [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var requestedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        ScoringConfiguration? customWeights = null;
+        if (proficiencyWeight.HasValue || availabilityWeight.HasValue ||
+            performanceWeight.HasValue || chemistryWeight.HasValue ||
+            workloadWeight.HasValue || experienceWeight.HasValue)
+        {
+            customWeights = new ScoringConfiguration();
+
+            if (proficiencyWeight.HasValue)
+                customWeights.ComponentWeights["Proficiency"] = proficiencyWeight.Value;
+            if (availabilityWeight.HasValue)
+                customWeights.ComponentWeights["Availability"] = availabilityWeight.Value;
+            if (performanceWeight.HasValue)
+                customWeights.ComponentWeights["Performance"] = performanceWeight.Value;
+            if (chemistryWeight.HasValue)
+                customWeights.ComponentWeights["TeamChemistry"] = chemistryWeight.Value;
+            if (workloadWeight.HasValue)
+                customWeights.ComponentWeights["WorkloadBalance"] = workloadWeight.Value;
+            if (experienceWeight.HasValue)
+                customWeights.ComponentWeights["Experience"] = experienceWeight.Value;
+        }
+
+        return await advancedMatchingService.GetTeamCompositionWithScoring(
+            projectId, requestedBy, customWeights);
+    }
+    [Authorize]
+    public async Task<Employee?> GetEmployee(
+    Guid id,
+    [Service] ApplicationDbContext context)
+    {
+        return await context.Employees
+            .Include(e => e.EmployeeSkills)
+            .ThenInclude(es => es.Skill)
+            .FirstOrDefaultAsync(e => e.Id == id);
     }
 }

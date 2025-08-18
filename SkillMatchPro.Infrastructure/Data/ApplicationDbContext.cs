@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Reflection.Emit;
+using Microsoft.EntityFrameworkCore;
 using SkillMatchPro.Domain.Entities;
 
 namespace SkillMatchPro.Infrastructure.Data;
@@ -18,8 +19,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Project> Projects { get; set; }
     public DbSet<ProjectRequirement> ProjectRequirements { get; set; }
     public DbSet<ProjectAssignment> ProjectAssignments { get; set; }
-
-
+    public DbSet<EmployeeProjectPerformance> EmployeeProjectPerformances { get; set; }
+    public DbSet<TeamCollaboration> TeamCollaborations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,11 +41,12 @@ public class ApplicationDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<User>(u => u.EmployeeId);
         });
-    modelBuilder.Entity<Employee>()
-        .HasQueryFilter(e => !e.IsDeleted);
 
-    modelBuilder.Entity<Skill>()
-        .HasQueryFilter(s => !s.IsDeleted);
+        modelBuilder.Entity<Employee>()
+            .HasQueryFilter(e => !e.IsDeleted);
+
+        modelBuilder.Entity<Skill>()
+            .HasQueryFilter(s => !s.IsDeleted);
 
         modelBuilder.Entity<EmployeeAvailability>(entity =>
         {
@@ -80,6 +82,7 @@ public class ApplicationDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(n => n.UserId);
         });
+
         // Project configuration
         modelBuilder.Entity<Project>(entity =>
         {
@@ -88,7 +91,7 @@ public class ApplicationDbContext : DbContext
             entity.HasQueryFilter(p => !p.IsDeleted);
         });
 
-        // ProjectRequirement configuration
+        // ProjectRequirement configuration - UPDATED WITH UNIQUE CONSTRAINT
         modelBuilder.Entity<ProjectRequirement>(entity =>
         {
             entity.HasKey(pr => pr.Id);
@@ -100,7 +103,37 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(pr => pr.Skill)
                 .WithMany()
                 .HasForeignKey(pr => pr.SkillId);
+
+            // ADD UNIQUE CONSTRAINT TO PREVENT DUPLICATE REQUIREMENTS
+            entity.HasIndex(pr => new { pr.ProjectId, pr.SkillId, pr.MinimumProficiency })
+                .IsUnique()
+                .HasDatabaseName("IX_ProjectRequirement_Unique_Skill_Proficiency");
         });
 
+        modelBuilder.Entity<EmployeeProjectPerformance>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.HasOne(e => e.Employee)
+                .WithMany()
+                .HasForeignKey(e => e.EmployeeId);
+
+            entity.HasOne(e => e.Project)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectId);
+
+            entity.HasIndex(e => new { e.EmployeeId, e.ProjectId });
+        });
+
+        modelBuilder.Entity<TeamCollaboration>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+
+            entity.HasOne(t => t.Project)
+                .WithMany()
+                .HasForeignKey(t => t.ProjectId);
+
+            entity.HasIndex(t => new { t.Employee1Id, t.Employee2Id, t.ProjectId });
+        });
     }
 }
