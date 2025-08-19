@@ -51,6 +51,9 @@ public class AdvancedMatchingService : IAdvancedMatchingService
         if (project == null)
             throw new ArgumentException("Project not found");
 
+        Console.WriteLine($"\n=== ADVANCED MATCHING FOR PROJECT: {project.Name} ===");
+        Console.WriteLine($"Requirements count: {project.Requirements.Count}");
+
         var teamComposition = new TeamComposition(projectId, requestedBy);
         var memberScores = new List<TeamMemberScore>();
         var currentTeam = new List<Employee>();
@@ -58,12 +61,20 @@ public class AdvancedMatchingService : IAdvancedMatchingService
         // Process each skill requirement
         foreach (var requirement in project.Requirements)
         {
+            Console.WriteLine($"\n--- Processing requirement: {requirement.Skill.Name} ({requirement.MinimumProficiency}) x{requirement.RequiredCount} ---");
+
             var candidates = await GetScoredCandidatesForSkill(
                 requirement.SkillId,
                 requirement.MinimumProficiency,
                 project,
                 currentTeam,
                 weights);
+
+            Console.WriteLine($"Found {candidates.Count} scored candidates");
+            foreach (var c in candidates)
+            {
+                Console.WriteLine($"  - {c.Employee.FirstName} {c.Employee.LastName}: Score = {c.TotalScore}, Available = {c.IsAvailable}");
+            }
 
             // Take top candidates
             var topCandidates = candidates
@@ -72,8 +83,12 @@ public class AdvancedMatchingService : IAdvancedMatchingService
                 .Take(requirement.RequiredCount)
                 .ToList();
 
+            Console.WriteLine($"Selected {topCandidates.Count} top candidates");
+
             foreach (var candidate in topCandidates)
             {
+                Console.WriteLine($"  Adding to team: {candidate.Employee.FirstName} {candidate.Employee.LastName}");
+
                 // Create old-style MatchScore for compatibility
                 var matchScore = new MatchScore(
                     candidate.ComponentScores["Proficiency"].Score,
@@ -98,6 +113,8 @@ public class AdvancedMatchingService : IAdvancedMatchingService
                 });
             }
         }
+
+        Console.WriteLine($"\n=== FINAL TEAM: {teamComposition.TeamMembers.Count} members ===");
 
         // Generate recommendations and risk analysis
         var recommendations = GenerateRecommendations(memberScores, project);
@@ -126,14 +143,32 @@ public class AdvancedMatchingService : IAdvancedMatchingService
     {
         var weights = customWeights ?? new ScoringConfiguration();
 
-        // Get candidates with the skill
-        var candidates = await _context.Employees
+        Console.WriteLine($"\n  Looking for skill {skillId} at {requiredProficiency} level");
+        Console.WriteLine($"  Current team size: {currentTeam.Count}");
+
+        // Get ALL employees with this skill
+        var allWithSkill = await _context.Employees
             .Include(e => e.EmployeeSkills)
             .ThenInclude(es => es.Skill)
+            .Include(e => e.ProjectAssignments)
+            .Where(e => e.EmployeeSkills.Any(es => es.SkillId == skillId))
+            .ToListAsync();
+
+        Console.WriteLine($"  Found {allWithSkill.Count} employees with this skill:");
+        foreach (var emp in allWithSkill)
+        {
+            var empSkill = emp.EmployeeSkills.First(es => es.SkillId == skillId);
+            Console.WriteLine($"    - {emp.FirstName} {emp.LastName}: {empSkill.Proficiency}");
+        }
+
+        // Filter by proficiency in memory
+        var candidates = allWithSkill
             .Where(e => e.EmployeeSkills.Any(es =>
                 es.SkillId == skillId &&
                 es.Proficiency >= requiredProficiency))
-            .ToListAsync();
+            .ToList();
+
+        Console.WriteLine($"  After proficiency filter ({requiredProficiency}+): {candidates.Count} candidates");
 
         var scoredCandidates = new List<ScoredCandidate>();
 
@@ -143,9 +178,34 @@ public class AdvancedMatchingService : IAdvancedMatchingService
                 .First(es => es.SkillId == skillId)
                 .Skill;
 
-            // Check availability
+            // Check if already on this project
+            var existingAssignment = candidate.ProjectAssignments
+                .FirstOrDefault(pa => pa.ProjectId == project.Id && pa.IsActive);
+
+            // Calculate how much MORE allocation we need
+            var additionalAllocationNeeded = existingAssignment != null
+                ? Math.Max(0, 100 - existingAssignment.AllocationPercentage)
+                : 100;
+
+            // Skip if already 100% on this project
+            if (additionalAllocationNeeded == 0)
+            {
+                Console.WriteLine($"    {candidate.FirstName} {candidate.LastName} already 100% on this project");
+                continue;
+            }
+
+            Console.WriteLine($"    Checking {candidate.FirstName} {candidate.LastName}: needs {additionalAllocationNeeded}% more allocation");
+
+            // Check if they have capacity for the ADDITIONAL allocation
             var hasConflict = await _allocationService.CheckAllocationConflict(
-                candidate.Id, 100, project.StartDate, project.EndDate);
+                candidate.Id, additionalAllocationNeeded, project.StartDate, project.EndDate);
+
+            // Calculate effective current allocation (excluding this project)
+            var effectiveCurrentAllocation = candidate.GetCurrentAllocationPercentage();
+            if (existingAssignment != null)
+            {
+                effectiveCurrentAllocation -= existingAssignment.AllocationPercentage;
+            }
 
             // Create scoring context
             var context = new ScoringContext
@@ -174,7 +234,7 @@ public class AdvancedMatchingService : IAdvancedMatchingService
             {
                 var weight = weights.ComponentWeights.ContainsKey(component.Key)
                     ? weights.ComponentWeights[component.Key]
-                    : 0.1m; // Default weight if not specified
+                    : 0.1m;
 
                 totalScore += component.Value.Score * weight * component.Value.Confidence;
                 totalConfidence += weight * component.Value.Confidence;
@@ -184,17 +244,22 @@ public class AdvancedMatchingService : IAdvancedMatchingService
             if (totalConfidence > 0)
                 totalScore = totalScore / totalConfidence;
 
+            Console.WriteLine($"    Scored {candidate.FirstName} {candidate.LastName}: {totalScore:F2} (Available: {!hasConflict})");
+
             scoredCandidates.Add(new ScoredCandidate
             {
                 Employee = candidate,
                 TotalScore = Math.Round(totalScore, 2),
                 ComponentScores = componentScores,
                 IsAvailable = !hasConflict,
-                CurrentAllocation = candidate.GetCurrentAllocationPercentage()
+                CurrentAllocation = effectiveCurrentAllocation
             });
         }
 
-        return scoredCandidates.OrderByDescending(c => c.TotalScore).ToList();
+        var sorted = scoredCandidates.OrderByDescending(c => c.TotalScore).ToList();
+        Console.WriteLine($"  Returning {sorted.Count} scored candidates (top score: {sorted.FirstOrDefault()?.TotalScore})");
+
+        return sorted;
     }
 
     private Dictionary<string, string> GenerateRecommendations(

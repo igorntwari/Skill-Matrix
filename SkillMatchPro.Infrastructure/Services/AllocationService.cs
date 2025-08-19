@@ -16,13 +16,23 @@ public class AllocationService : IAllocationService
     }
 
     public async Task<bool> CheckAllocationConflict(Guid employeeId, int requiredPercentage,
-        DateTime startDate, DateTime endDate)
+    DateTime startDate, DateTime endDate)
     {
         var employee = await _context.Employees
             .Include(e => e.ProjectAssignments)
             .FirstOrDefaultAsync(e => e.Id == employeeId);
 
-        if (employee == null) return true; // Conflict - employee doesn't exist
+        if (employee == null)
+        {
+            Console.WriteLine($"  CONFLICT: Employee {employeeId} not found!");
+            return true;
+        }
+
+        Console.WriteLine($"  Checking allocation for {employee.FirstName} {employee.LastName}:");
+        Console.WriteLine($"    - Required: {requiredPercentage}%");
+        Console.WriteLine($"    - Period: {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}");
+        Console.WriteLine($"    - Total assignments: {employee.ProjectAssignments.Count}");
+        Console.WriteLine($"    - Active assignments: {employee.ProjectAssignments.Count(pa => pa.IsActive)}");
 
         // Check each day in the range
         var currentDate = startDate.Date;
@@ -30,17 +40,26 @@ public class AllocationService : IAllocationService
         {
             var dailyAllocation = employee.ProjectAssignments
                 .Where(pa => pa.IsActive &&
-                    pa.StartDate <= currentDate &&
-                    pa.EndDate >= currentDate)
+                    pa.StartDate.Date <= currentDate &&
+                    pa.EndDate.Date >= currentDate)
                 .Sum(pa => pa.AllocationPercentage);
 
+            if (dailyAllocation > 0)
+            {
+                Console.WriteLine($"    - {currentDate:yyyy-MM-dd}: {dailyAllocation}% allocated");
+            }
+
             if (dailyAllocation + requiredPercentage > 100)
-                return true; // Conflict found
+            {
+                Console.WriteLine($"  CONFLICT: {dailyAllocation}% + {requiredPercentage}% > 100%");
+                return true;
+            }
 
             currentDate = currentDate.AddDays(1);
         }
 
-        return false; // No conflict
+        Console.WriteLine($"  NO CONFLICT: Employee is available");
+        return false;
     }
 
     public async Task<List<Employee>> FindAvailableEmployees(Guid skillId,

@@ -27,8 +27,10 @@ public class Project
     private readonly List<ProjectRequirement> _requirements = new();
     public IReadOnlyCollection<ProjectRequirement> Requirements => _requirements.AsReadOnly();
 
-    private readonly List<ProjectAssignment> _assignments = new();
-    public IReadOnlyCollection<ProjectAssignment> Assignments => _assignments.AsReadOnly();
+    //private readonly List<ProjectAssignment> _assignments = new();
+    //public IReadOnlyCollection<ProjectAssignment> Assignments => _assignments.AsReadOnly();
+    public ICollection<ProjectAssignment> Assignments { get; private set; } = new List<ProjectAssignment>();
+
 
     private Project()
     {
