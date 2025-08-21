@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SkillMatchPro.Infrastructure.Data;
@@ -11,9 +12,11 @@ using SkillMatchPro.Infrastructure.Data;
 namespace SkillMatchPro.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250820095730_AddWorkSchedulesV2")]
+    partial class AddWorkSchedulesV2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -462,34 +465,6 @@ namespace SkillMatchPro.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("SkillMatchPro.Domain.Entities.WorkSchedule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("BufferHoursPerWeek")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("EffectiveFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("EffectiveTo")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("StandardHoursPerWeek")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmployeeId", "EffectiveTo");
-
-                    b.ToTable("WorkSchedules");
-                });
-
             modelBuilder.Entity("SkillMatchPro.Domain.Entities.EmployeeAvailability", b =>
                 {
                     b.HasOne("SkillMatchPro.Domain.Entities.Employee", "Employee")
@@ -604,17 +579,6 @@ namespace SkillMatchPro.Infrastructure.Migrations
                     b.HasOne("SkillMatchPro.Domain.Entities.Employee", "Employee")
                         .WithOne()
                         .HasForeignKey("SkillMatchPro.Domain.Entities.User", "EmployeeId");
-
-                    b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("SkillMatchPro.Domain.Entities.WorkSchedule", b =>
-                {
-                    b.HasOne("SkillMatchPro.Domain.Entities.Employee", "Employee")
-                        .WithMany()
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("Employee");
                 });

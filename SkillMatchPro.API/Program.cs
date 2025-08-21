@@ -52,6 +52,7 @@ public class Program
             builder.Services.AddScoped<JwtService>();
             builder.Services.AddScoped<IMatchingService, MatchingService>();
             builder.Services.AddScoped<IAdvancedMatchingService, AdvancedMatchingService>();
+            builder.Services.AddScoped<ITeamOptimizationService, TeamOptimizationService>();
 
 
             // Register application services

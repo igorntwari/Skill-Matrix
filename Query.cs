@@ -9,6 +9,8 @@ using SkillMatchPro.Domain.ValueObjects;
 using System.Security.Claims;
 using SkillMatchPro.Application.Scoring;
 using SkillMatchPro.API.GraphQL.Types;
+using System;
+using System.Collections.Generic;
 
 namespace SkillMatchPro.API.GraphQL;
 
@@ -243,18 +245,16 @@ public async Task<List<Employee>> SearchEmployees(
     [Service] ITeamOptimizationService optimizationService,
     [Service] ApplicationDbContext context)
     {
-        var optimizationConstraints = constraints != null
-            ? new OptimizationConstraints
-            {
-                MaxBudgetPerWeek = constraints.MaxBudgetPerWeek,
-                MaxTeamSize = constraints.MaxTeamSize,
-                MinSeniorMembers = constraints.MinSeniorMembers,
-                RequireBackupCoverage = constraints.RequireBackupCoverage,
-                MinBufferHoursPerPerson = constraints.MinBufferHoursPerPerson,
-                RequiredEmployees = constraints.RequiredEmployees,
-                ExcludedEmployees = constraints.ExcludedEmployees
-            }
-            : new OptimizationConstraints();
+        var optimizationConstraints = new OptimizationConstraints
+        {
+            MaxBudgetPerWeek = constraints?.MaxBudgetPerWeek,
+            MaxTeamSize = constraints?.MaxTeamSize,
+            MinSeniorMembers = constraints?.MinSeniorMembers,
+            RequireBackupCoverage = constraints?.RequireBackupCoverage ?? true,
+            MinBufferHoursPerPerson = constraints?.MinBufferHoursPerPerson ?? 4,
+            RequiredEmployees = constraints?.RequiredEmployees ?? new List<Guid>(),
+            ExcludedEmployees = constraints?.ExcludedEmployees ?? new List<Guid>()
+        };
 
         var result = await optimizationService.OptimizeTeam(projectId, optimizationConstraints);
 
@@ -321,11 +321,16 @@ public async Task<List<Employee>> SearchEmployees(
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<List<HourlyAvailabilityType>> GetTeamHourlyAvailability(
         List<Guid> employeeIds,
-        DateTime startDate,
-        DateTime endDate,
+         [GraphQLType(typeof(StringType))] string startDate,
+         [GraphQLType(typeof(StringType))] string endDate
         [Service] ITeamOptimizationService optimizationService,
         [Service] ApplicationDbContext context)
     {
+        if (!DateTime.TryParse(startDate, out var parsedStartDate))
+            throw new ArgumentException("Invalid start date format");
+        if (!DateTime.TryParse(endDate, out var parsedEndDate))
+            throw new ArgumentException("Invalid end date format");
+
         var availability = await optimizationService.GetTeamAvailability(
             employeeIds, startDate, endDate);
 
@@ -379,75 +384,53 @@ public async Task<List<Employee>> SearchEmployees(
         };
     }
     [Authorize(Policy = "ManagerOrAbove")]
-    public async Task<TeamOptimizationResultType> GetSimpleOptimizedTeam(
+public async Task<TeamOptimizationResultType> GetSimpleOptimizedTeam(
     Guid projectId,
     [Service] ITeamOptimizationService optimizationService,
     [Service] ApplicationDbContext context)
+{
+    // Use default constraints
+    var constraints = new OptimizationConstraints();
+    var result = await optimizationService.OptimizeTeam(projectId, constraints);
+    
+    // Map to GraphQL types (same mapping code as before)
+    var mappedResult = new TeamOptimizationResultType
     {
-        // Use default constraints
-        var constraints = new OptimizationConstraints();
-        var result = await optimizationService.OptimizeTeam(projectId, constraints);
-
-        // Map to GraphQL types (same mapping code as before)
-        var mappedResult = new TeamOptimizationResultType
+        Warnings = result.Warnings,
+        Recommendations = result.Recommendations,
+        Summary = new TeamAllocationSummaryType
         {
-            Warnings = result.Warnings,
-            Recommendations = result.Recommendations,
-            Summary = new TeamAllocationSummaryType
-            {
-                TotalHoursRequired = result.Summary.TotalHoursRequired,
-                TotalHoursAllocated = result.Summary.TotalHoursAllocated,
-                AverageUtilization = result.Summary.AverageUtilization,
-                HoursBySkill = result.Summary.HoursBySkill,
-                HoursBySeniority = result.Summary.HoursBySeniority
-            },
-            Options = new List<TeamOptionType>()
+            TotalHoursRequired = result.Summary.TotalHoursRequired,
+            TotalHoursAllocated = result.Summary.TotalHoursAllocated,
+            AverageUtilization = result.Summary.AverageUtilization,
+            HoursBySkill = result.Summary.HoursBySkill,
+            HoursBySeniority = result.Summary.HoursBySeniority
+        },
+        Options = new List<TeamOptionType>()
+    };
+    
+    // Map options...
+    foreach (var option in result.Options)
+    {
+        var mappedOption = new TeamOptionType
+        {
+            Id = option.Id,
+            OptionName = option.OptionName,
+            TotalCostPerWeek = option.TotalCostPerWeek,
+            QualityScore = option.QualityScore,
+            RiskScore = option.RiskScore,
+            MeetsAllRequirements = option.MeetsAllRequirements,
+            TotalHoursPerWeek = option.GetTotalHoursPerWeek(),
+            EffectiveHoursPerWeek = option.GetEffectiveHoursPerWeek(),
+            TradeOffs = option.TradeOffs.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+            Allocations = new List<HourAllocationDetail>()
         };
-
-        // Map options...
-        foreach (var option in result.Options)
-        {
-            var mappedOption = new TeamOptionType
-            {
-                Id = option.Id,
-                OptionName = option.OptionName,
-                TotalCostPerWeek = option.TotalCostPerWeek,
-                QualityScore = option.QualityScore,
-                RiskScore = option.RiskScore,
-                MeetsAllRequirements = option.MeetsAllRequirements,
-                TotalHoursPerWeek = option.GetTotalHoursPerWeek(),
-                EffectiveHoursPerWeek = option.GetEffectiveHoursPerWeek(),
-                TradeOffs = option.TradeOffs.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-                Allocations = new List<HourAllocationDetail>()
-            };
-
-            foreach (var allocation in option.Allocations)
-            {
-                var employee = await context.Employees
-                    .FirstOrDefaultAsync(e => e.Id == allocation.EmployeeId);
-
-                if (employee != null)
-                {
-                    mappedOption.Allocations.Add(new HourAllocationDetail
-                    {
-                        EmployeeId = allocation.EmployeeId,
-                        EmployeeName = $"{employee.FirstName} {employee.LastName}",
-                        SkillName = allocation.AllocationNote,
-                        HoursPerWeek = allocation.HoursPerWeek,
-                        EffortMultiplier = allocation.EffortMultiplier,
-                        EffectiveHours = allocation.GetEffectiveHours(),
-                        AllocationNote = allocation.AllocationNote,
-                        WeeklyCost = allocation.HoursPerWeek * GetHourlyCost(employee)
-                    });
-                }
-            }
-
-            mappedResult.Options.Add(mappedOption);
-        }
-
-
-        return mappedResult;
+        
+        mappedResult.Options.Add(mappedOption);
     }
+    
+    return mappedResult;
+}
 }
 
 
