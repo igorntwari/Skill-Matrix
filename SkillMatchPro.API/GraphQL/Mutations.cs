@@ -15,7 +15,7 @@ namespace SkillMatchPro.API.GraphQL;
 
 
 public class Mutations
-{   
+{
     public async Task<Employee> CreateEmployee(
         CreateEmployeeInput input,
         [Service] ApplicationDbContext context)
@@ -590,5 +590,295 @@ public class Mutations
 
         return await allocationService.FindAvailableEmployees(
             skillId, minProficiency, allocationPercentage, parsedStartDate, parsedEndDate);
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<ProjectTeamResult> ApplyOptimizedTeam(
+    Guid projectId,
+    List<TeamMemberAssignmentInput> assignments,
+    [Service] ApplicationDbContext context,
+    [Service] IAllocationService allocationService,
+    [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var assignedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        var project = await context.Projects
+            .Include(p => p.Requirements)
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+
+        if (project == null)
+            throw new GraphQLException("Project not found");
+
+        var results = new List<ProjectAssignment>();
+        var errors = new List<string>();
+
+        foreach (var assignment in assignments)
+        {
+            try
+            {
+                // Check availability
+                var allocationPercentage = (int)((assignment.HoursPerWeek / 40.0) * 100);
+
+                var hasConflict = await allocationService.CheckAllocationConflict(
+                    assignment.EmployeeId,
+                    allocationPercentage,
+                    project.StartDate,
+                    project.EndDate);
+
+                if (hasConflict)
+                {
+                    errors.Add($"{assignment.EmployeeName}: Cannot allocate {assignment.HoursPerWeek} hours/week");
+                    continue;
+                }
+
+                // Check if already assigned
+                var existing = await context.ProjectAssignments
+                    .FirstOrDefaultAsync(pa =>
+                        pa.ProjectId == projectId &&
+                        pa.EmployeeId == assignment.EmployeeId &&
+                        pa.IsActive);
+
+                if (existing != null)
+                {
+                    // Update existing
+                    context.Entry(existing).Property(e => e.AllocationPercentage).CurrentValue = allocationPercentage;
+                    context.Entry(existing).Property(e => e.Role).CurrentValue = assignment.Role;
+                    results.Add(existing);
+                }
+                else
+                {
+                    // Create new
+                    var newAssignment = new ProjectAssignment(
+                        projectId,
+                        assignment.EmployeeId,
+                        assignment.Role,
+                        allocationPercentage,
+                        project.StartDate,
+                        project.EndDate,
+                        assignedBy
+                    );
+
+                    context.ProjectAssignments.Add(newAssignment);
+                    results.Add(newAssignment);
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{assignment.EmployeeName}: {ex.Message}");
+            }
+        }
+
+        await context.SaveChangesAsync();
+
+        return new ProjectTeamResult
+        {
+            SuccessfulAssignments = results,
+            Errors = errors,
+            TotalAssigned = results.Count,
+            TotalRequested = assignments.Count
+        };
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<ProjectAssignment> QuickAssignEmployee(
+        Guid projectId,
+        Guid employeeId,
+        string role,
+        int hoursPerWeek,
+        [Service] ApplicationDbContext context,
+        [Service] IAllocationService allocationService,
+        [Service] IHttpContextAccessor httpContextAccessor)
+    {
+        var assignedBy = httpContextAccessor.HttpContext?.User
+            .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
+
+        var project = await context.Projects
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+
+        if (project == null)
+            throw new GraphQLException("Project not found");
+
+        var employee = await context.Employees
+            .FirstOrDefaultAsync(e => e.Id == employeeId);
+
+        if (employee == null)
+            throw new GraphQLException("Employee not found");
+
+        // Check availability
+        var allocationPercentage = (int)((hoursPerWeek / 40.0) * 100);
+
+        var hasConflict = await allocationService.CheckAllocationConflict(
+            employeeId, allocationPercentage, project.StartDate, project.EndDate);
+
+        if (hasConflict)
+        {
+            // Get current allocations for better error message
+            var currentHours = await GetCurrentWeeklyHours(employeeId, project.StartDate, project.EndDate, context);
+            var availableHours = 40 - currentHours;
+
+            throw new GraphQLException(
+                $"{employee.FirstName} {employee.LastName} only has {availableHours} hours/week available during this period"
+            );
+        }
+
+        var assignment = new ProjectAssignment(
+            projectId, employeeId, role,
+            allocationPercentage, project.StartDate, project.EndDate, assignedBy);
+
+        context.ProjectAssignments.Add(assignment);
+        await context.SaveChangesAsync();
+
+        return assignment;
+    }
+
+    // Helper method
+    private async Task<int> GetCurrentWeeklyHours(
+        Guid employeeId,
+        DateTime startDate,
+        DateTime endDate,
+        ApplicationDbContext context)
+    {
+        var assignments = await context.ProjectAssignments
+            .Where(pa => pa.EmployeeId == employeeId &&
+                        pa.IsActive &&
+                        pa.StartDate <= endDate &&
+                        pa.EndDate >= startDate)
+            .ToListAsync();
+
+        return assignments.Sum(a => (int)(a.AllocationPercentage / 100.0 * 40));
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<bool> UpdateProjectAssignmentHours(
+     Guid assignmentId,
+     int newHoursPerWeek,
+     [Service] ApplicationDbContext context,
+     [Service] IAllocationService allocationService)
+    {
+        var assignment = await context.ProjectAssignments
+            .Include(pa => pa.Employee)
+            .FirstOrDefaultAsync(pa => pa.Id == assignmentId);
+
+        if (assignment == null)
+            throw new GraphQLException("Assignment not found");
+
+        // Convert to percentage
+        var newAllocationPercentage = (int)((newHoursPerWeek / 40.0) * 100);
+
+        // Check if new allocation is valid (excluding current assignment)
+        var additionalAllocation = newAllocationPercentage - assignment.AllocationPercentage;
+
+        if (additionalAllocation > 0) // Only check if increasing hours
+        {
+            var hasConflict = await allocationService.CheckAllocationConflict(
+                assignment.EmployeeId,
+                additionalAllocation,
+                assignment.StartDate,
+                assignment.EndDate);
+
+            if (hasConflict)
+            {
+                var employee = assignment.Employee;
+                throw new GraphQLException(
+                    $"{employee.FirstName} {employee.LastName} cannot work {newHoursPerWeek} hours/week due to other commitments"
+                );
+            }
+        }
+
+        // Update allocation using EF Core Entry
+        context.Entry(assignment).Property(a => a.AllocationPercentage).CurrentValue = newAllocationPercentage;
+        await context.SaveChangesAsync();
+
+        return true;
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<bool> RemoveEmployeeFromProject(
+        Guid assignmentId,
+        [Service] ApplicationDbContext context)
+    {
+        var assignment = await context.ProjectAssignments
+            .Include(pa => pa.Employee)
+            .Include(pa => pa.Project)
+            .FirstOrDefaultAsync(pa => pa.Id == assignmentId);
+
+        if (assignment == null)
+            throw new GraphQLException("Assignment not found");
+
+        // Log who was removed for audit
+        var employee = assignment.Employee;
+        var project = assignment.Project;
+
+        Console.WriteLine($"Removing {employee.FirstName} {employee.LastName} from {project.Name}");
+
+        // Soft delete - mark as inactive using EF Core Entry
+        context.Entry(assignment).Property(a => a.IsActive).CurrentValue = false;
+        await context.SaveChangesAsync();
+
+        return true;
+    }
+
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<ProjectAssignmentDetail> UpdateProjectAssignment(
+        Guid assignmentId,
+        string? newRole,
+        int? newHoursPerWeek,
+        [Service] ApplicationDbContext context,
+        [Service] IAllocationService allocationService)
+    {
+        var assignment = await context.ProjectAssignments
+            .Include(pa => pa.Employee)
+            .Include(pa => pa.Project)
+            .FirstOrDefaultAsync(pa => pa.Id == assignmentId);
+
+        if (assignment == null)
+            throw new GraphQLException("Assignment not found");
+
+        // Update role if provided
+        if (!string.IsNullOrEmpty(newRole))
+        {
+            context.Entry(assignment).Property(a => a.Role).CurrentValue = newRole;
+        }
+
+        // Update hours if provided
+        if (newHoursPerWeek.HasValue)
+        {
+            var newAllocationPercentage = (int)((newHoursPerWeek.Value / 40.0) * 100);
+            var additionalAllocation = newAllocationPercentage - assignment.AllocationPercentage;
+
+            if (additionalAllocation > 0)
+            {
+                var hasConflict = await allocationService.CheckAllocationConflict(
+                    assignment.EmployeeId,
+                    additionalAllocation,
+                    assignment.StartDate,
+                    assignment.EndDate);
+
+                if (hasConflict)
+                {
+                    throw new GraphQLException(
+                        $"Cannot update to {newHoursPerWeek} hours/week due to conflicts"
+                    );
+                }
+            }
+
+            context.Entry(assignment).Property(a => a.AllocationPercentage).CurrentValue = newAllocationPercentage;
+        }
+
+        await context.SaveChangesAsync();
+
+        // Return updated details
+        return new ProjectAssignmentDetail
+        {
+            Id = assignment.Id,
+            EmployeeId = assignment.EmployeeId,
+            EmployeeName = $"{assignment.Employee.FirstName} {assignment.Employee.LastName}",
+            ProjectName = assignment.Project.Name,
+            Role = assignment.Role,
+            HoursPerWeek = (int)(assignment.AllocationPercentage / 100.0 * 40),
+            StartDate = assignment.StartDate,
+            EndDate = assignment.EndDate
+        };
     }
 }

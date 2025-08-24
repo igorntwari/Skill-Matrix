@@ -448,6 +448,62 @@ public async Task<List<Employee>> SearchEmployees(
 
         return mappedResult;
     }
+
+    [Authorize]
+    public async Task<ProjectTeamSummary> GetProjectTeam(
+    Guid projectId,
+    [Service] ApplicationDbContext context)
+    {
+        var project = await context.Projects
+            .Include(p => p.Requirements)
+            .ThenInclude(r => r.Skill)
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+
+        if (project == null)
+            throw new GraphQLException("Project not found");
+
+        var assignments = await context.ProjectAssignments
+            .Include(pa => pa.Employee)
+            .ThenInclude(e => e.EmployeeSkills)
+            .ThenInclude(es => es.Skill)
+            .Where(pa => pa.ProjectId == projectId && pa.IsActive)
+            .ToListAsync();
+
+        var summary = new ProjectTeamSummary
+        {
+            ProjectId = projectId,
+            ProjectName = project.Name,
+            TotalHoursAllocated = assignments.Sum(a => (int)(a.AllocationPercentage / 100.0 * 40)),
+            TeamMembers = assignments.Select(a => new TeamMemberSummary
+            {
+                AssignmentId = a.Id,
+                EmployeeId = a.EmployeeId,
+                EmployeeName = $"{a.Employee.FirstName} {a.Employee.LastName}",
+                Role = a.Role,
+                HoursPerWeek = (int)(a.AllocationPercentage / 100.0 * 40),
+                Skills = a.Employee.EmployeeSkills.Select(es => es.Skill.Name).ToList(),
+                StartDate = a.StartDate,
+                EndDate = a.EndDate
+            }).ToList()
+        };
+
+        // Check coverage
+        foreach (var req in project.Requirements)
+        {
+            var coverage = assignments
+                .Where(a => a.Employee.EmployeeSkills.Any(es => es.SkillId == req.SkillId))
+                .Sum(a => (int)(a.AllocationPercentage / 100.0 * 40));
+
+            summary.SkillCoverage[req.Skill.Name] = new SkillCoverageInfo
+            {
+                RequiredHours = req.RequiredCount * 36, // Assuming 36 hours per person
+                AllocatedHours = coverage,
+                IsCovered = coverage >= req.RequiredCount * 36
+            };
+        }
+
+        return summary;
+    }
 }
 
 

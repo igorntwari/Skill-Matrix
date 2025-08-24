@@ -481,15 +481,16 @@ public class TeamOptimizationService : ITeamOptimizationService
 
     private decimal GetHourlyCost(Employee employee)
     {
-        // Simplified cost model based on title
-        return employee.Title.ToLower() switch
-        {
-            var t when t.Contains("junior") => 50m,
-            var t when t.Contains("senior") => 120m,
-            var t when t.Contains("lead") => 150m,
-            var t when t.Contains("principal") => 180m,
-            _ => 80m // Default intermediate rate
-        };
+        // we will implement this letter
+        //return employee.Title.ToLower() switch
+        //{
+        //    var t when t.Contains("junior") => 50m,
+        //    var t when t.Contains("senior") => 120m,
+        //    var t when t.Contains("lead") => 150m,
+        //    var t when t.Contains("principal") => 180m,
+        //    _ => 80m // Default intermediate rate
+        //};
+        return 0;
     }
 
     private decimal GetEffortMultiplier(Employee employee)
