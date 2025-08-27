@@ -6,6 +6,7 @@ public interface INotificationService
     Task NotifyEmployeeAssignedToProject(Guid employeeId, Guid projectId, string projectName, string role, int hoursPerWeek);
     Task NotifyEmployeeRemovedFromProject(Guid employeeId, Guid projectId, string projectName);
     Task NotifyEmployeeHoursUpdated(Guid employeeId, Guid projectId, string projectName, int oldHours, int newHours);
+
     // Skill Notifications
     Task NotifyNewSkillAdded(Guid employeeId, string employeeName, string skillName, string proficiencyLevel);
 

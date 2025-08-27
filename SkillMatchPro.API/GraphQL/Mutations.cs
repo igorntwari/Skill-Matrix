@@ -13,9 +13,17 @@ using SkillMatchPro.Application.Services;
 
 namespace SkillMatchPro.API.GraphQL;
 
-
 public class Mutations
 {
+    private readonly ILogger<Mutations> _logger;
+    private readonly INotificationService _notificationService;
+
+    public Mutations(ILogger<Mutations> logger, INotificationService notificationService)
+    {
+        _logger = logger;
+        _notificationService = notificationService;
+    }
+
     public async Task<Employee> CreateEmployee(
         CreateEmployeeInput input,
         [Service] ApplicationDbContext context)
@@ -71,22 +79,22 @@ public class Mutations
     }
 
     public async Task<EmployeeSkill> AssignSkillToEmployee(
-       AssignSkillInput input,  // Use the input we created
-       [Service] ApplicationDbContext context)  // Fixed typo: contex → context
+       AssignSkillInput input,
+       [Service] ApplicationDbContext context)
     {
         // 1. GET the employee (not just check if exists)
         var employee = await context.Employees
-            .Include(e => e.EmployeeSkills)  // Include skills to check duplicates
-            .FirstOrDefaultAsync(e => e.Id == input.EmployeeId);  // Use ID, not email
+            .Include(e => e.EmployeeSkills)
+            .FirstOrDefaultAsync(e => e.Id == input.EmployeeId);
 
-        if (employee == null)  // If null, employee doesn't exist
+        if (employee == null)
         {
             throw new GraphQLException("Employee not found.");
         }
 
         // 2. GET the skill
         var skill = await context.Skills
-            .FirstOrDefaultAsync(s => s.Id == input.SkillId);  // Use ID, not name
+            .FirstOrDefaultAsync(s => s.Id == input.SkillId);
 
         if (skill == null)
         {
@@ -108,15 +116,23 @@ public class Mutations
         // 5. Save to database
         await context.SaveChangesAsync();
 
+        // Notify managers/admins about new skill
+        await _notificationService.NotifyNewSkillAdded(
+            employee.Id,
+            $"{employee.FirstName} {employee.LastName}",
+            skill.Name,
+            input.Proficiency.ToString()
+        );
+
         // 6. Return the newly created relationship
         return employee.EmployeeSkills
             .First(es => es.SkillId == input.SkillId);
     }
 
     public async Task<AuthPayload> Register(
-    RegisterInput input,
-    [Service] ApplicationDbContext context,
-    [Service] JwtService jwtService)
+        RegisterInput input,
+        [Service] ApplicationDbContext context,
+        [Service] JwtService jwtService)
     {
         try
         {
@@ -169,7 +185,6 @@ public class Mutations
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
             throw new GraphQLException($"Registration failed: {ex.Message}");
         }
-
     }
 
     public async Task<AuthPayload> Login(
@@ -206,91 +221,6 @@ public class Mutations
 
     [Authorize(Policy = "AdminOnly")]
     public async Task<User> AssignRole(
-    Guid userId,
-    UserRole newRole,
-    [Service] ApplicationDbContext context)
-    {
-        var user = await context.Users
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user == null)
-        {
-            throw new GraphQLException("User not found.");
-        }
-
-        // For now, we'll need to add a method to User entity to update role
-        // Or use reflection/EF Core to update
-        context.Entry(user).Property(u => u.Role).CurrentValue = newRole;
-
-        await context.SaveChangesAsync();
-
-        return user;
-    }
-
-    [Authorize(Policy = "ManagerOrAbove")]
-    public async Task<List<Employee>> GetAllEmployees(
-        [Service] ApplicationDbContext context)
-    {
-        return await context.Employees
-            .Include(e => e.EmployeeSkills)
-            .ThenInclude(es => es.Skill)
-            .ToListAsync();
-    }
-    //// TEMPORARY - Remove in production!
-    //public async Task<AuthPayload> CreateAdminUser(
-    //    [Service] ApplicationDbContext context,
-    //    [Service] JwtService jwtService)
-    //{
-    //    // Check if admin already exists
-    //    var adminExists = await context.Users
-    //        .AnyAsync(u => u.Email == "admin@skillmatchpro.com");
-
-    //    if (adminExists)
-    //    {
-    //        throw new GraphQLException("Admin user already exists.");
-    //    }
-
-    //    // Create admin user
-    //    var passwordHash = BCrypt.Net.BCrypt.HashPassword("AdminPass123!");
-    //    var adminUser = new User("admin@skillmatchpro.com", passwordHash, UserRole.Admin);
-
-    //    // Create admin employee
-    //    var adminEmployee = new Employee(
-    //        "System",
-    //        "Administrator",
-    //        "admin@skillmatchpro.com",
-    //        "IT",
-    //        "System Administrator"
-    //    );
-
-    //    adminUser.LinkToEmployee(adminEmployee.Id);
-
-    //    context.Users.Add(adminUser);
-    //    context.Employees.Add(adminEmployee);
-    //    await context.SaveChangesAsync();
-
-    //    var token = jwtService.GenerateToken(adminUser);
-
-    //    return new AuthPayload
-    //    {
-    //        Token = token,
-    //        User = adminUser,
-    //        Employee = adminEmployee
-    //    };
-    //}
-
-    // Add this field at the top of Mutations class
-    private readonly ILogger<Mutations> _logger;
-
-    // Add constructor
-    public Mutations(ILogger<Mutations> logger)
-    {
-        _logger = logger;
-    }
-
-    // Update AssignRole to add logging
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<User> AssignRole(
         Guid userId,
         UserRole newRole,
         [Service] ApplicationDbContext context,
@@ -320,13 +250,23 @@ public class Mutations
         return user;
     }
 
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<List<Employee>> GetAllEmployees(
+        [Service] ApplicationDbContext context)
+    {
+        return await context.Employees
+            .Include(e => e.EmployeeSkills)
+            .ThenInclude(es => es.Skill)
+            .ToListAsync();
+    }
+
     [Authorize]
     public async Task<Employee> UpdateMyProfile(
-    string? firstName,
-    string? lastName,
-    string? title,
-    [Service] ApplicationDbContext context,
-    [Service] IHttpContextAccessor httpContextAccessor)
+        string? firstName,
+        string? lastName,
+        string? title,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
         var userEmail = httpContextAccessor.HttpContext?.User
             .FindFirst(ClaimTypes.Email)?.Value;
@@ -362,9 +302,9 @@ public class Mutations
 
     [Authorize]
     public async Task<Employee> UpdateEmployee(
-    UpdateEmployeeInput input,
-    [Service] ApplicationDbContext context,
-    [Service] IHttpContextAccessor httpContextAccessor)
+        UpdateEmployeeInput input,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
         var currentUserEmail = httpContextAccessor.HttpContext?.User
             .FindFirst(ClaimTypes.Email)?.Value;
@@ -457,14 +397,14 @@ public class Mutations
 
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<Project> CreateProject(
-     string name,
-     string description,
-     string department,
-     string startDate,
-     string endDate,
-     int priority,
-     [Service] ApplicationDbContext context,
-     [Service] IHttpContextAccessor httpContextAccessor)
+        string name,
+        string description,
+        string department,
+        string startDate,
+        string endDate,
+        int priority,
+        [Service] ApplicationDbContext context,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
         if (!DateTime.TryParse(startDate, out var parsedStartDate))
             throw new ArgumentException("Invalid start date format");
@@ -497,14 +437,13 @@ public class Mutations
         return project;
     }
 
-
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<ProjectRequirement> AddProjectRequirement(
-     Guid projectId,
-     Guid skillId,
-     ProficiencyLevel minimumProficiency,
-     int requiredCount,
-     [Service] ApplicationDbContext context)
+        Guid projectId,
+        Guid skillId,
+        ProficiencyLevel minimumProficiency,
+        int requiredCount,
+        [Service] ApplicationDbContext context)
     {
         var project = await context.Projects
             .Include(p => p.Requirements)
@@ -532,15 +471,15 @@ public class Mutations
 
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<ProjectAssignment> AssignEmployeeToProject(
-    Guid projectId,
-    Guid employeeId,
-    string role,
-    int allocationPercentage,
-    string startDate,
-    string endDate,
-    [Service] ApplicationDbContext context,
-    [Service] IAllocationService allocationService,
-    [Service] IHttpContextAccessor httpContextAccessor)
+        Guid projectId,
+        Guid employeeId,
+        string role,
+        int allocationPercentage,
+        string startDate,
+        string endDate,
+        [Service] ApplicationDbContext context,
+        [Service] IAllocationService allocationService,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
         var assignedBy = httpContextAccessor.HttpContext?.User
             .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
@@ -555,6 +494,11 @@ public class Mutations
         parsedStartDate = DateTime.SpecifyKind(parsedStartDate, DateTimeKind.Utc);
         parsedEndDate = DateTime.SpecifyKind(parsedEndDate, DateTimeKind.Utc);
 
+        // Get project name for notification
+        var project = await context.Projects.FindAsync(projectId);
+        if (project == null)
+            throw new GraphQLException("Project not found");
+
         // Check for conflicts
         var hasConflict = await allocationService.CheckAllocationConflict(
             employeeId, allocationPercentage, parsedStartDate, parsedEndDate);
@@ -568,19 +512,32 @@ public class Mutations
         context.ProjectAssignments.Add(assignment);
         await context.SaveChangesAsync();
 
+        // Convert allocation percentage to hours
+        var hoursPerWeek = (int)(allocationPercentage / 100.0 * 40);
+
+        // Send notification
+        await _notificationService.NotifyEmployeeAssignedToProject(
+            employeeId,
+            projectId,
+            project.Name,
+            role,
+            hoursPerWeek
+        );
+
         _logger.LogInformation("Employee {EmployeeId} assigned to project {ProjectId} by {User}",
             employeeId, projectId, assignedBy);
 
         return assignment;
     }
+
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<List<Employee>> GetAvailableEmployeesForSkill(
-    Guid skillId,
-    ProficiencyLevel minProficiency,
-    int allocationPercentage,
-    string startDate,  // Changed to string
-    string endDate,    // Changed to string
-    [Service] IAllocationService allocationService)
+        Guid skillId,
+        ProficiencyLevel minProficiency,
+        int allocationPercentage,
+        string startDate,
+        string endDate,
+        [Service] IAllocationService allocationService)
     {
         // Parse dates
         if (!DateTime.TryParse(startDate, out var parsedStartDate))
@@ -594,11 +551,11 @@ public class Mutations
 
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<ProjectTeamResult> ApplyOptimizedTeam(
-    Guid projectId,
-    List<TeamMemberAssignmentInput> assignments,
-    [Service] ApplicationDbContext context,
-    [Service] IAllocationService allocationService,
-    [Service] IHttpContextAccessor httpContextAccessor)
+        Guid projectId,
+        List<TeamMemberAssignmentInput> assignments,
+        [Service] ApplicationDbContext context,
+        [Service] IAllocationService allocationService,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
         var assignedBy = httpContextAccessor.HttpContext?.User
             .FindFirst(ClaimTypes.Email)?.Value ?? "Unknown";
@@ -661,6 +618,15 @@ public class Mutations
 
                     context.ProjectAssignments.Add(newAssignment);
                     results.Add(newAssignment);
+
+                    // Send notification for new assignment
+                    await _notificationService.NotifyEmployeeAssignedToProject(
+                        assignment.EmployeeId,
+                        projectId,
+                        project.Name,
+                        assignment.Role,
+                        assignment.HoursPerWeek
+                    );
                 }
             }
             catch (Exception ex)
@@ -729,6 +695,15 @@ public class Mutations
         context.ProjectAssignments.Add(assignment);
         await context.SaveChangesAsync();
 
+        // Send notification
+        await _notificationService.NotifyEmployeeAssignedToProject(
+            employeeId,
+            projectId,
+            project.Name,
+            role,
+            hoursPerWeek
+        );
+
         return assignment;
     }
 
@@ -751,17 +726,21 @@ public class Mutations
 
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<bool> UpdateProjectAssignmentHours(
-     Guid assignmentId,
-     int newHoursPerWeek,
-     [Service] ApplicationDbContext context,
-     [Service] IAllocationService allocationService)
+        Guid assignmentId,
+        int newHoursPerWeek,
+        [Service] ApplicationDbContext context,
+        [Service] IAllocationService allocationService)
     {
         var assignment = await context.ProjectAssignments
             .Include(pa => pa.Employee)
+            .Include(pa => pa.Project)
             .FirstOrDefaultAsync(pa => pa.Id == assignmentId);
 
         if (assignment == null)
             throw new GraphQLException("Assignment not found");
+
+        // Store old hours for notification
+        var oldHours = (int)(assignment.AllocationPercentage / 100.0 * 40);
 
         // Convert to percentage
         var newAllocationPercentage = (int)((newHoursPerWeek / 40.0) * 100);
@@ -790,6 +769,15 @@ public class Mutations
         context.Entry(assignment).Property(a => a.AllocationPercentage).CurrentValue = newAllocationPercentage;
         await context.SaveChangesAsync();
 
+        // Send notification
+        await _notificationService.NotifyEmployeeHoursUpdated(
+            assignment.EmployeeId,
+            assignment.ProjectId,
+            assignment.Project.Name,
+            oldHours,
+            newHoursPerWeek
+        );
+
         return true;
     }
 
@@ -816,6 +804,13 @@ public class Mutations
         context.Entry(assignment).Property(a => a.IsActive).CurrentValue = false;
         await context.SaveChangesAsync();
 
+        // Send notification
+        await _notificationService.NotifyEmployeeRemovedFromProject(
+            assignment.EmployeeId,
+            assignment.ProjectId,
+            project.Name
+        );
+
         return true;
     }
 
@@ -834,6 +829,8 @@ public class Mutations
 
         if (assignment == null)
             throw new GraphQLException("Assignment not found");
+
+        var oldHours = (int)(assignment.AllocationPercentage / 100.0 * 40);
 
         // Update role if provided
         if (!string.IsNullOrEmpty(newRole))
@@ -867,6 +864,18 @@ public class Mutations
         }
 
         await context.SaveChangesAsync();
+
+        // Send notification if hours changed
+        if (newHoursPerWeek.HasValue && newHoursPerWeek.Value != oldHours)
+        {
+            await _notificationService.NotifyEmployeeHoursUpdated(
+                assignment.EmployeeId,
+                assignment.ProjectId,
+                assignment.Project.Name,
+                oldHours,
+                newHoursPerWeek.Value
+            );
+        }
 
         // Return updated details
         return new ProjectAssignmentDetail

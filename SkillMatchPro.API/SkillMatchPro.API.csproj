@@ -41,6 +41,7 @@
     <None Remove="GraphQL\Validators\" />
     <None Remove="GraphQL\Type\" />
     <None Remove="Services\" />
+    <None Remove="Hubs\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="GraphQL\" />
@@ -48,5 +49,6 @@
     <Folder Include="GraphQL\Validators\" />
     <Folder Include="GraphQL\Type\" />
     <Folder Include="Services\" />
+    <Folder Include="Hubs\" />
   </ItemGroup>
 </Project>

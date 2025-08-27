@@ -4,15 +4,15 @@ using SkillMatchPro.Infrastructure.Data;
 using DotNetEnv;
 using SkillMatchPro.API.Services;
 using HotChocolate.Authorization;
-using Microsoft.AspNetCore.Authentication.JwtBearer;  
-using Microsoft.IdentityModel.Tokens;                 
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Serilog;
 using Serilog.Events;
 using SkillMatchPro.Application.Services;
 using SkillMatchPro.Infrastructure.Services;
-
-
+using Microsoft.AspNetCore.SignalR;
+using SkillMatchPro.API.Hubs;
 namespace SkillMatchPro.API;
 
 public class Program
@@ -53,7 +53,13 @@ public class Program
             builder.Services.AddScoped<IMatchingService, MatchingService>();
             builder.Services.AddScoped<IAdvancedMatchingService, AdvancedMatchingService>();
             builder.Services.AddScoped<ITeamOptimizationService, TeamOptimizationService>();
+            builder.Services.AddScoped<INotificationService>(provider =>
+            {
+                var hubContext = provider.GetRequiredService<IHubContext<ProjectNotificationHub>>();
+                var logger = provider.GetRequiredService<ILogger<SignalRNotificationService>>();
 
+                return new SignalRNotificationService(hubContext.Clients, logger) as INotificationService;
+            });
 
             // Register application services
             builder.Services.AddScoped<IAllocationService, AllocationService>();
@@ -107,6 +113,8 @@ public class Program
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(connectionString));
 
+            builder.Services.AddSignalR();
+
             var app = builder.Build();
             app.Use(async (context, next) =>
             {
@@ -115,6 +123,7 @@ public class Program
                 Console.WriteLine($"User name: {user.Identity?.Name}");
                 await next();
             });
+
 
             // Configure pipeline
             if (app.Environment.IsDevelopment())
@@ -126,6 +135,7 @@ public class Program
             app.UseHttpsRedirection();
             app.UseAuthentication();
             app.UseAuthorization();
+            app.MapHub<ProjectNotificationHub>("/hubs/notifications");
             app.MapGraphQL();
             app.MapControllers();
 
