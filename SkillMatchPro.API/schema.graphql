@@ -1,0 +1,481 @@
+﻿"""
+SkillMatchPro API - Skill-based project staffing system
+"""
+schema {
+  query: Query
+  mutation: Mutations
+}
+
+"""User authentication and account management"""
+type Mutations {
+  """Authenticate user and receive JWT token"""
+  login(
+    """User email address"""
+    email: String!
+    """User password"""
+    password: String!
+  ): AuthPayload!
+
+  """Register new user account"""
+  register(
+    """Registration details"""
+    input: RegisterInput!
+  ): AuthPayload!
+
+  """Create new employee (Admin only)"""
+  createEmployee(
+    """Employee details"""
+    input: CreateEmployeeInput!
+  ): Employee!
+
+  """Update employee information"""
+  updateEmployee(
+    """Update details"""
+    input: UpdateEmployeeInput!
+  ): Employee!
+
+  """Soft delete employee (Admin only)"""
+  deleteEmployee(
+    """Employee ID to delete"""
+    id: UUID!
+  ): Boolean!
+
+  """Create new skill"""
+  createSkill(
+    """Skill details"""
+    input: CreateSkillInput!
+  ): Skill!
+
+  """Assign skill to employee"""
+  assignSkillToEmployee(
+    """Assignment details"""
+    input: AssignSkillInput!
+  ): EmployeeSkill!
+
+  """Create new project"""
+  createProject(
+    """Project name"""
+    name: String!
+    """Project description"""
+    description: String!
+    """Department"""
+    department: String!
+    """Start date (YYYY-MM-DD)"""
+    startDate: String!
+    """End date (YYYY-MM-DD)"""
+    endDate: String!
+    """Priority (1-5)"""
+    priority: Int!
+  ): Project!
+
+  """Add skill requirement to project"""
+  addProjectRequirement(
+    """Project ID"""
+    projectId: UUID!
+    """Required skill ID"""
+    skillId: UUID!
+    """Minimum proficiency level"""
+    minimumProficiency: ProficiencyLevel!
+    """Number of people needed"""
+    requiredCount: Int!
+  ): ProjectRequirement!
+
+  """Quick assign employee to project"""
+  quickAssignEmployee(
+    """Project ID"""
+    projectId: UUID!
+    """Employee ID"""
+    employeeId: UUID!
+    """Role on project"""
+    role: String!
+    """Hours per week (max 40)"""
+    hoursPerWeek: Int!
+  ): ProjectAssignment!
+
+  """Update assignment hours"""
+  updateProjectAssignmentHours(
+    """Assignment ID"""
+    assignmentId: UUID!
+    """New hours per week"""
+    newHoursPerWeek: Int!
+  ): Boolean!
+
+  """Remove employee from project"""
+  removeEmployeeFromProject(
+    """Assignment ID"""
+    assignmentId: UUID!
+  ): Boolean!
+
+  """Apply optimized team composition"""
+  applyOptimizedTeam(
+    """Project ID"""
+    projectId: UUID!
+    """Team member assignments"""
+    assignments: [TeamMemberAssignmentInput!]!
+  ): ProjectTeamResult!
+
+  """Assign role to user (Admin only)"""
+  assignRole(
+    """User ID"""
+    userId: UUID!
+    """New role"""
+    newRole: UserRole!
+  ): User!
+
+  """Update current user profile"""
+  updateMyProfile(
+    """New first name"""
+    firstName: String
+    """New last name"""
+    lastName: String
+    """New job title"""
+    title: String
+  ): Employee!
+}
+
+"""Query operations"""
+type Query {
+  """Get all employees"""
+  employees: [Employee!]!
+
+  """Get employee by ID"""
+  employee(id: UUID!): Employee
+
+  """Get current user info"""
+  me: User
+
+  """Get all skills"""
+  skills: [Skill!]!
+
+  """Get all projects"""
+  projects: [Project!]!
+
+  """Get project by ID"""
+  project(id: UUID!): Project
+
+  """Get skill matches for project"""
+  getSkillMatches(
+    """Project ID"""
+    projectId: UUID!
+  ): [SkillMatch!]!
+
+  """Get optimal team composition"""
+  getTeamComposition(
+    """Project ID"""
+    projectId: UUID!
+  ): TeamComposition!
+
+  """Get optimized team options"""
+  optimizedTeamOptions(
+    """Project ID"""
+    projectId: UUID!
+    """Optimization constraints"""
+    constraints: OptimizationConstraintsInput
+  ): TeamOptimizationResultType!
+
+  """Get project team details"""
+  projectTeam(
+    """Project ID"""
+    projectId: UUID!
+  ): ProjectTeamSummary!
+
+  """Get available employees for skill"""
+  getAvailableEmployeesForSkill(
+    """Skill ID"""
+    skillId: UUID!
+    """Minimum proficiency"""
+    minProficiency: ProficiencyLevel!
+    """Required allocation percentage"""
+    allocationPercentage: Int!
+    """Start date"""
+    startDate: String!
+    """End date"""
+    endDate: String!
+  ): [Employee!]!
+}
+
+"""Authentication payload"""
+type AuthPayload {
+  """JWT token"""
+  token: String!
+  """User account"""
+  user: User!
+  """Associated employee profile"""
+  employee: Employee
+}
+
+"""User account"""
+type User {
+  """User ID"""
+  id: UUID!
+  """Email address"""
+  email: String!
+  """User role"""
+  role: UserRole!
+  """Linked employee ID"""
+  employeeId: UUID
+  """Associated employee"""
+  employee: Employee
+  """Creation timestamp"""
+  createdAt: DateTime!
+}
+
+"""Employee profile"""
+type Employee {
+  """Employee ID"""
+  id: UUID!
+  """First name"""
+  firstName: String!
+  """Last name"""
+  lastName: String!
+  """Email address"""
+  email: String!
+  """Department"""
+  department: String!
+  """Job title"""
+  title: String!
+  """Hire date"""
+  hiredDate: DateTime
+  """Active status"""
+  isActive: Boolean!
+  """Deletion status"""
+  isDeleted: Boolean!
+  """Employee skills"""
+  employeeSkills: [EmployeeSkill!]!
+  """Project assignments"""
+  projectAssignments: [ProjectAssignment!]!
+}
+
+"""Skill definition"""
+type Skill {
+  """Skill ID"""
+  id: UUID!
+  """Skill name"""
+  name: String!
+  """Category"""
+  category: String!
+  """Description"""
+  description: String
+  """Active status"""
+  isActive: Boolean!
+  """Deletion status"""
+  isDeleted: Boolean!
+}
+
+"""Employee skill relationship"""
+type EmployeeSkill {
+  """Employee ID"""
+  employeeId: UUID!
+  """Skill ID"""
+  skillId: UUID!
+  """Employee"""
+  employee: Employee!
+  """Skill"""
+  skill: Skill!
+  """Proficiency level"""
+  proficiency: ProficiencyLevel!
+  """Date acquired"""
+  acquiredDate: DateTime!
+  """Last used date"""
+  lastUsedDate: DateTime
+}
+
+"""Project"""
+type Project {
+  """Project ID"""
+  id: UUID!
+  """Project name"""
+  name: String!
+  """Description"""
+  description: String!
+  """Department"""
+  department: String!
+  """Start date"""
+  startDate: DateTime!
+  """End date"""
+  endDate: DateTime!
+  """Status"""
+  status: ProjectStatus!
+  """Priority (1-5)"""
+  priority: Int!
+  """Skill requirements"""
+  requirements: [ProjectRequirement!]!
+  """Team assignments"""
+  assignments: [ProjectAssignment!]!
+  """Creation info"""
+  createdAt: DateTime!
+  """Created by"""
+  createdBy: String!
+  """Update info"""
+  updatedAt: DateTime!
+  """Updated by"""
+  updatedBy: String
+}
+
+"""Project skill requirement"""
+type ProjectRequirement {
+  """Requirement ID"""
+  id: UUID!
+  """Project ID"""
+  projectId: UUID!
+  """Skill ID"""
+  skillId: UUID!
+  """Project"""
+  project: Project!
+  """Skill"""
+  skill: Skill!
+  """Minimum proficiency"""
+  minimumProficiency: ProficiencyLevel!
+  """Number required"""
+  requiredCount: Int!
+}
+
+"""Project assignment"""
+type ProjectAssignment {
+  """Assignment ID"""
+  id: UUID!
+  """Project ID"""
+  projectId: UUID!
+  """Employee ID"""
+  employeeId: UUID!
+  """Project"""
+  project: Project!
+  """Employee"""
+  employee: Employee!
+  """Role"""
+  role: String!
+  """Allocation percentage"""
+  allocationPercentage: Int!
+  """Start date"""
+  startDate: DateTime!
+  """End date"""
+  endDate: DateTime!
+  """Active status"""
+  isActive: Boolean!
+  """Assignment date"""
+  assignedAt: DateTime!
+  """Assigned by"""
+  assignedBy: String!
+}
+
+"""Proficiency levels"""
+enum ProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+  MASTER
+}
+
+"""Project status"""
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+"""User roles"""
+enum UserRole {
+  Employee
+  Manager
+  Admin
+}
+
+"""Registration input"""
+input RegisterInput {
+  """Email address"""
+  email: String!
+  """Password (min 8 chars)"""
+  password: String!
+  """First name"""
+  firstName: String!
+  """Last name"""
+  lastName: String!
+  """Department"""
+  department: String!
+  """Job title"""
+  title: String!
+}
+
+"""Create employee input"""
+input CreateEmployeeInput {
+  """First name"""
+  firstName: String!
+  """Last name"""
+  lastName: String!
+  """Email address"""
+  email: String!
+  """Department"""
+  department: String!
+  """Job title"""
+  title: String!
+}
+
+"""Update employee input"""
+input UpdateEmployeeInput {
+  """Employee ID"""
+  id: UUID!
+  """New first name"""
+  firstName: String
+  """New last name"""
+  lastName: String
+  """New department"""
+  department: String
+  """New job title"""
+  title: String
+}
+
+"""Create skill input"""
+input CreateSkillInput {
+  """Skill name"""
+  name: String!
+  """Category"""
+  category: String!
+  """Description"""
+  description: String
+}
+
+"""Assign skill input"""
+input AssignSkillInput {
+  """Employee ID"""
+  employeeId: UUID!
+  """Skill ID"""
+  skillId: UUID!
+  """Proficiency level"""
+  proficiency: ProficiencyLevel!
+}
+
+"""Team member assignment input"""
+input TeamMemberAssignmentInput {
+  """Employee ID"""
+  employeeId: UUID!
+  """Employee name (for errors)"""
+  employeeName: String!
+  """Role on project"""
+  role: String!
+  """Hours per week"""
+  hoursPerWeek: Int!
+}
+
+"""Optimization constraints"""
+input OptimizationConstraintsInput {
+  """Maximum budget per week"""
+  maxBudgetPerWeek: Float
+  """Maximum team size"""
+  maxTeamSize: Int
+  """Minimum senior members"""
+  minSeniorMembers: Int
+  """Require backup coverage"""
+  requireBackupCoverage: Boolean
+  """Minimum buffer hours per person"""
+  minBufferHoursPerPerson: Int
+  """Required employees"""
+  requiredEmployees: [UUID!]
+  """Excluded employees"""
+  excludedEmployees: [UUID!]
+}
+
+scalar UUID
+scalar DateTime

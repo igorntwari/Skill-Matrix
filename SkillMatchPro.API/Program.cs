@@ -13,6 +13,8 @@ using SkillMatchPro.Application.Services;
 using SkillMatchPro.Infrastructure.Services;
 using Microsoft.AspNetCore.SignalR;
 using SkillMatchPro.API.Hubs;
+using HotChocolate.AspNetCore;
+
 namespace SkillMatchPro.API;
 
 public class Program
@@ -53,13 +55,10 @@ public class Program
             builder.Services.AddScoped<IMatchingService, MatchingService>();
             builder.Services.AddScoped<IAdvancedMatchingService, AdvancedMatchingService>();
             builder.Services.AddScoped<ITeamOptimizationService, TeamOptimizationService>();
-            builder.Services.AddScoped<INotificationService>(provider =>
-            {
-                var hubContext = provider.GetRequiredService<IHubContext<ProjectNotificationHub>>();
-                var logger = provider.GetRequiredService<ILogger<SignalRNotificationService>>();
-
-                return new SignalRNotificationService(hubContext.Clients, logger) as INotificationService;
-            });
+            builder.Services.AddSignalR();
+            builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
+            builder.Services.AddScoped<IHubClients>(provider =>
+                provider.GetRequiredService<IHubContext<ProjectNotificationHub>>().Clients);
 
             // Register application services
             builder.Services.AddScoped<IAllocationService, AllocationService>();
@@ -81,6 +80,23 @@ public class Program
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not found")))
+        };
+
+        // Add this for SignalR
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
             builder.Services.AddAuthorization(options =>
@@ -104,8 +120,8 @@ public class Program
                 .AddMutationType<Mutations>()
                 .AddAuthorization()
                 .AddErrorFilter<ErrorFilter>()
-                .AddFiltering()        
-                .AddSorting()        
+                .AddFiltering()
+                .AddSorting()
                 .AddProjections()
                 .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = true);
 
@@ -113,7 +129,21 @@ public class Program
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(connectionString));
 
-            builder.Services.AddSignalR();
+
+
+            // Add CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", builder =>
+                {
+                    builder
+                        .AllowAnyOrigin()
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials()
+                        .WithOrigins("http://127.0.0.1:5500", "http://localhost:5500"); // Your test client origin
+                });
+            });
 
             var app = builder.Build();
             app.Use(async (context, next) =>
@@ -133,10 +163,17 @@ public class Program
             }
 
             app.UseHttpsRedirection();
+            app.UseCors("AllowAll");
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapHub<ProjectNotificationHub>("/hubs/notifications");
-            app.MapGraphQL();
+            app.MapGraphQL()
+   .WithOptions(new GraphQLServerOptions
+   {
+       Tool = {
+           Enable = app.Environment.IsDevelopment()
+       }
+   });
             app.MapControllers();
 
             app.Run();
